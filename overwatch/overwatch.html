@@ -1,0 +1,1595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OVERWATCH // Endless Sniper</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#05070a; font-family:'JetBrains Mono', monospace; cursor:none; }
+  #canvasWrap { position:fixed; inset:0; cursor:none; }
+  canvas { display:block; cursor:none; }
+  /* ---------- HUD ---------- */
+  #hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
+  .hud-corner { position:absolute; color:#c9d6d9; }
+  #stats {
+    top:22px; left:24px;
+    display:flex; flex-direction:column; gap:2px;
+    text-shadow:0 1px 3px rgba(0,0,0,.8);
+  }
+  .stat-label { font-size:10px; letter-spacing:3px; color:#5f7a80; font-weight:500; }
+  .stat-value { font-family:'Oswald',sans-serif; font-size:26px; font-weight:700; color:#e7efee; letter-spacing:1px; margin-bottom:8px; }
+  #streakWrap { top:22px; right:24px; text-align:right; }
+  #streakVal { font-family:'Oswald',sans-serif; font-size:40px; font-weight:700; color:#ff5c33; text-shadow:0 0 18px rgba(255,92,51,.55); transition:transform .12s, color .25s, text-shadow .25s; }
+  #streakLabel { font-size:10px; letter-spacing:3px; color:#5f7a80; }
+  #accWrap { bottom:26px; right:24px; text-align:right; }
+  #accVal { font-family:'Oswald',sans-serif; font-size:20px; color:#9fd6b8; font-weight:700; }
+  /* Crosshair */
+  #crosshair {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:18px; height:18px; z-index:11;
+  }
+  #crosshair::before, #crosshair::after {
+    content:''; position:absolute; background:#c8ffe0; opacity:.85;
+  }
+  #crosshair::before { width:2px; height:18px; left:8px; }
+  #crosshair::after  { width:18px; height:2px; top:8px; }
+  /* Scope overlay */
+  #scopeOverlay {
+    position:fixed; inset:0; z-index:9; display:none; pointer-events:none;
+  }
+  #scopeOverlay.active { display:block; }
+  #scopeMask {
+    position:absolute; inset:0;
+    background: radial-gradient(circle at center, transparent 0, transparent 27vh, #000 27.4vh, #000 100%);
+  }
+  #scopeReticle {
+    position:absolute; top:50%; left:50%; width:54vh; height:54vh; transform:translate(-50%,-50%);
+    border-radius:50%; border:1px solid rgba(120,255,190,.4);
+  }
+  #scopeReticle::before, #scopeReticle::after {
+    content:''; position:absolute; background:rgba(120,255,190,.55);
+  }
+  #scopeReticle::before { width:1px; height:100%; left:50%; }
+  #scopeReticle::after { width:100%; height:1px; top:50%; }
+  .tick { position:absolute; background:rgba(120,255,190,.35); }
+  /* Bolt / reload indicator */
+  #boltIndicator {
+    position:fixed; bottom:70px; left:50%; transform:translateX(-50%);
+    font-size:11px; letter-spacing:4px; color:#ff9a5c; z-index:11; opacity:0; transition:opacity .15s;
+  }
+  #boltIndicator.show { opacity:1; }
+  /* Muzzle flash screen flick (extra punch layered over the 3D flash) */
+  #flashFlick {
+    position:fixed; inset:0; z-index:13; pointer-events:none;
+    background:#fff6d8; opacity:0; mix-blend-mode:screen;
+  }
+  /* Session goals readout */
+  #sessionWrap { bottom:26px; left:24px; }
+  /* Big centered banners: streak tiers + exceptional-kill highlight */
+  .banner {
+    position:fixed; top:38%; left:50%; transform:translate(-50%,-50%) scale(0.7);
+    z-index:14; pointer-events:none; text-align:center;
+    font-family:'Oswald',sans-serif; font-weight:700; letter-spacing:4px;
+    text-shadow:0 4px 18px rgba(0,0,0,.6);
+    opacity:0;
+  }
+  .banner .banner-title { font-size:34px; }
+  .banner .banner-sub { font-size:13px; letter-spacing:5px; margin-top:4px; opacity:.85; }
+  /* Full-screen tint used for the exceptional-kill highlight beat */
+  #killTint {
+    position:fixed; inset:0; z-index:7; pointer-events:none;
+    background:radial-gradient(circle at center, rgba(255,92,51,0) 0%, rgba(255,92,51,0) 100%);
+    opacity:0;
+  }
+  /* Colored screen flash used when a streak tier is crossed */
+  #streakFlash {
+    position:fixed; inset:0; z-index:6; pointer-events:none; opacity:0;
+  }
+  /* Hit marker text */
+  .float-text {
+    position:fixed; z-index:12; pointer-events:none;
+    font-family:'Oswald',sans-serif; font-weight:700; letter-spacing:1px;
+    text-shadow:0 2px 8px rgba(0,0,0,.7);
+    transform:translate(-50%,-50%);
+  }
+  /* Start / pause overlay */
+  #startScreen {
+    position:fixed; inset:0; z-index:30; background:rgba(4,6,8,.88);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; color:#e7efee;
+    cursor:pointer !important;
+  }
+  #startScreen h1 {
+    font-family:'Oswald',sans-serif; font-size:42px; font-weight:700; letter-spacing:6px; color:#f0f5f4;
+  }
+  #startScreen .sub { margin-top:10px; font-size:12px; letter-spacing:4px; color:#5f7a80; }
+  #startScreen .keys { margin-top:34px; font-size:12px; color:#9fb0b4; line-height:2; letter-spacing:1px; }
+  #startScreen .keys b { color:#c8ffe0; }
+  #startScreen .pulse { margin-top:34px; font-size:13px; letter-spacing:3px; color:#ff5c33; animation:pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+  #vignette {
+    position:fixed; inset:0; z-index:8; pointer-events:none;
+    box-shadow: inset 0 0 180px rgba(0,0,0,.55);
+  }
+  /* Kill replay: cinematic letterbox bars + label */
+  #cineBars { position:fixed; inset:0; z-index:15; pointer-events:none; opacity:0; transition:opacity .3s ease; }
+  #cineBars .bar { position:absolute; left:0; right:0; height:9vh; background:#000; }
+  #cineBars .bar.top { top:0; }
+  #cineBars .bar.bottom { bottom:0; }
+  #cineBars.show { opacity:1; }
+  #replayLabel {
+    position:fixed; top:2.6vh; left:50%; transform:translateX(-50%);
+    z-index:16; font-family:'Oswald',sans-serif; letter-spacing:6px; font-size:12px;
+    color:#ffd76b; opacity:0; transition:opacity .3s ease; pointer-events:none;
+    text-shadow:0 2px 6px rgba(0,0,0,.7);
+  }
+  #replayLabel.show { opacity:1; }
+  body.replay-active #hud,
+  body.replay-active #crosshair,
+  body.replay-active #vignette,
+  body.replay-active #boltIndicator,
+  body.replay-active #scopeOverlay {
+    opacity:0; transition:opacity .2s ease;
+  }
+</style>
+</head>
+<body>
+<div id="canvasWrap"></div>
+<div id="vignette"></div>
+<div id="streakFlash"></div>
+<div id="killTint"></div>
+<div id="flashFlick"></div>
+<div id="scopeOverlay">
+  <div id="scopeMask"></div>
+  <div id="scopeReticle"></div>
+</div>
+<div id="crosshair"></div>
+<div id="boltIndicator">CYCLING&nbsp;BOLT</div>
+<div id="cineBars"><div class="bar top"></div><div class="bar bottom"></div></div>
+<div id="replayLabel">KILL REPLAY</div>
+<div id="hud">
+  <div class="hud-corner" id="stats">
+    <div class="stat-label">SCORE</div>
+    <div class="stat-value" id="scoreVal">0</div>
+    <div class="stat-label">BEST SCORE</div>
+    <div class="stat-value" id="bestScoreVal" style="font-size:18px;margin-bottom:8px;color:#ffd76b;">0</div>
+    <div class="stat-label">KILLS</div>
+    <div class="stat-value" id="killsVal">0</div>
+    <div class="stat-label">HEADSHOTS</div>
+    <div class="stat-value" id="hsVal">0</div>
+  </div>
+  <div class="hud-corner" id="streakWrap">
+    <div id="streakVal">x0</div>
+    <div id="streakLabel">STREAK</div>
+  </div>
+  <div class="hud-corner" id="accWrap">
+    <div class="stat-label">ACCURACY</div>
+    <div id="accVal">--%</div>
+  </div>
+  <div class="hud-corner" id="sessionWrap">
+    <div class="stat-label">TARGETS / MIN</div>
+    <div class="stat-value" id="tpmVal" style="font-size:20px;margin-bottom:6px;">0.0</div>
+    <div class="stat-label">BEST STREAK (SESSION)</div>
+    <div class="stat-value" id="bestStreakVal" style="font-size:20px;">0</div>
+  </div>
+</div>
+<div id="startScreen">
+  <h1>OVERWATCH</h1>
+  <div class="sub">ENDLESS SNIPER ENCOUNTER</div>
+  <div class="keys">
+    <div><b>MOVE MOUSE</b> — aim around</div>
+    <div><b>RIGHT CLICK (hold)</b> — scope in</div>
+    <div><b>LEFT CLICK</b> — fire</div>
+  </div>
+  <div class="pulse">CLICK TO TAKE POSITION</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+/* ============================================================
+   SCENE / RENDERER
+   ============================================================ */
+const wrap = document.getElementById('canvasWrap');
+const scene = new THREE.Scene();
+const NEST = new THREE.Vector3(0, 2.2, -42); // sniper nest position
+const BASE_YAW = Math.PI; // camera defaults to facing -Z; play area is at +Z from the nest, so face around
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 500);
+camera.position.copy(NEST);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+wrap.appendChild(renderer.domElement);
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+/* ============================================================
+   AUDIO — built from the two provided clips (gunshot.mp3, load.mp3),
+   loaded from the same directory as this file (no subfolder). A handful
+   of extra cues (headshot thock, streak stingers, scope wind, miss thud,
+   exceptional-kill sting) are procedurally synthesized with WebAudio
+   since no separate assets exist for those.
+   ============================================================ */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const masterGain = audioCtx.createGain();
+masterGain.gain.value = 0.85;
+masterGain.connect(audioCtx.destination);
+
+const sfxBuffers = {};
+async function loadSfx(name, url){
+  try {
+    const res = await fetch(url);
+    const arr = await res.arrayBuffer();
+    sfxBuffers[name] = await audioCtx.decodeAudioData(arr);
+  } catch (err) {
+    console.warn('[audio] could not load', url, err);
+  }
+}
+loadSfx('gunshot', 'gunshot.mp3');
+loadSfx('bolt', 'load.mp3');
+
+function playSfx(name, { rate = 1, gain = 1, delay = 0 } = {}){
+  const buf = sfxBuffers[name];
+  if (!buf) return null;
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = rate;
+  const g = audioCtx.createGain();
+  g.gain.value = gain;
+  src.connect(g).connect(masterGain);
+  src.start(audioCtx.currentTime + delay);
+  return src;
+}
+
+/* Distinct headshot "thock": a short pitched body-tone + a sharp
+   high-passed click on top, layered under the gunshot sample. */
+function playHeadshotThock(){
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(220, t);
+  osc.frequency.exponentialRampToValueAtTime(70, t + 0.09);
+  const og = audioCtx.createGain();
+  og.gain.setValueAtTime(0.0001, t);
+  og.gain.exponentialRampToValueAtTime(0.9, t + 0.006);
+  og.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+  osc.connect(og).connect(masterGain);
+  osc.start(t); osc.stop(t + 0.16);
+
+  const bufLen = Math.floor(audioCtx.sampleRate * 0.025);
+  const noiseBuf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufLen);
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const hp = audioCtx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 3000;
+  const ng = audioCtx.createGain();
+  ng.gain.setValueAtTime(0.55, t);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+  noise.connect(hp).connect(ng).connect(masterGain);
+  noise.start(t);
+}
+
+/* Dull thud for shots that miss or eat cover, so a miss doesn't feel silent. */
+function playMissThud(){
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(140, t);
+  osc.frequency.exponentialRampToValueAtTime(50, t + 0.12);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.26, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  osc.connect(g).connect(masterGain);
+  osc.start(t); osc.stop(t + 0.2);
+}
+
+/* Escalating streak stinger: a short rising arpeggio that climbs in
+   pitch with each tier, plus a low sub-thump underneath for weight. */
+const STREAK_TIER_FREQS = {
+  5:   [523.25, 659.25, 783.99],
+  10:  [587.33, 739.99, 880.00],
+  20:  [659.25, 830.61, 987.77],
+  35:  [739.99, 932.33, 1108.73],
+  50:  [830.61, 1046.50, 1244.51],
+  75:  [932.33, 1174.66, 1396.91],
+  100: [1046.50, 1318.51, 1567.98],
+};
+function playStreakStinger(tier){
+  const freqs = STREAK_TIER_FREQS[tier] || [880, 1108.73, 1396.91];
+  const t0 = audioCtx.currentTime;
+  freqs.forEach((f, i) => {
+    const start = t0 + i * 0.075;
+    const osc = audioCtx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = f;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(0.32, start + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + 0.24);
+    osc.connect(g).connect(masterGain);
+    osc.start(start); osc.stop(start + 0.26);
+  });
+  const sub = audioCtx.createOscillator();
+  sub.type = 'sine'; sub.frequency.value = 80;
+  const sg = audioCtx.createGain();
+  sg.gain.setValueAtTime(0.0001, t0);
+  sg.gain.exponentialRampToValueAtTime(0.4, t0 + 0.015);
+  sg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.3);
+  sub.connect(sg).connect(masterGain);
+  sub.start(t0); sub.stop(t0 + 0.32);
+}
+
+/* Low dramatic swell for an exceptional (killcam-worthy) kill. */
+function playExceptionalSting(){
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(60, t);
+  osc.frequency.exponentialRampToValueAtTime(30, t + 0.5);
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 400;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.5, t + 0.08);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+  osc.connect(lp).connect(g).connect(masterGain);
+  osc.start(t); osc.stop(t + 0.65);
+}
+
+/* Filtered noise sweep for the bullet's flight during the kill-replay bullet-cam. */
+function playBulletWhiz(durationSec){
+  const t0 = audioCtx.currentTime;
+  const bufLen = Math.floor(audioCtx.sampleRate * Math.min(2.2, durationSec + 0.15));
+  const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) data[i] = Math.random()*2-1;
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.Q.value = 1.1;
+  bp.frequency.setValueAtTime(2600, t0);
+  bp.frequency.exponentialRampToValueAtTime(650, t0 + durationSec);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(0.22, t0 + Math.min(0.2, durationSec*0.3));
+  g.gain.linearRampToValueAtTime(0.0001, t0 + durationSec);
+  src.connect(bp).connect(g).connect(masterGain);
+  src.start(t0);
+}
+/* Weighty low thud for the instant the killcam bullet lands. */
+function playKillcamImpact(){
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(140, t);
+  osc.frequency.exponentialRampToValueAtTime(35, t + 0.35);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.75, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+  osc.connect(g).connect(masterGain);
+  osc.start(t); osc.stop(t + 0.55);
+}
+
+/* Ambient wind loop while scoped in — brownish noise through a lowpass,
+   faded in/out so it never feels like a hard on/off switch. */
+let windSource = null, windGain = null;
+function startWind(){
+  if (windSource) return;
+  const bufSize = audioCtx.sampleRate * 2;
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < bufSize; i++){
+    const white = Math.random() * 2 - 1;
+    last = (last + 0.02 * white) / 1.02;
+    data[i] = last * 3.5;
+  }
+  windSource = audioCtx.createBufferSource();
+  windSource.buffer = buf;
+  windSource.loop = true;
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 450;
+  windGain = audioCtx.createGain();
+  windGain.gain.value = 0.0001;
+  windSource.connect(lp).connect(windGain).connect(masterGain);
+  windSource.start();
+  windGain.gain.linearRampToValueAtTime(0.16, audioCtx.currentTime + 0.5);
+}
+function stopWind(){
+  if (!windSource || !windGain) return;
+  windGain.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+  const s = windSource;
+  windSource = null;
+  setTimeout(() => { try { s.stop(); } catch(e){} }, 400);
+}
+/* ============================================================
+   LIGHTING / ENVIRONMENT VARIATION
+   ============================================================ */
+const LIGHT_PRESETS = [
+  { name:'overcast day', sky:0x8f9aa3, fog:0x8f9aa3, hemi:[0xcfd8dc,0x3a3f42,0.9], sun:[0xffffff,0.75], fogDist:[60,200] },
+  { name:'dusk',         sky:0x3b3450, fog:0x352c46, hemi:[0x7a6a9a,0x1a1420,0.55], sun:[0xffab6b,0.55], fogDist:[45,170] },
+  { name:'clear noon',   sky:0xbfe0f2, fog:0xbfe0f2, hemi:[0xffffff,0x445055,1.05], sun:[0xffffff,1.05], fogDist:[80,240] },
+  { name:'grey morning', sky:0x9aa6ac, fog:0x9aa6ac, hemi:[0xcdd6d9,0x33393c,0.8], sun:[0xe9eef0,0.65], fogDist:[55,190] },
+];
+let hemiLight, sunLight;
+function applyLighting(preset){
+  scene.background = new THREE.Color(preset.sky);
+  scene.fog = new THREE.Fog(preset.fog, preset.fogDist[0], preset.fogDist[1]);
+  if (hemiLight) scene.remove(hemiLight);
+  if (sunLight) scene.remove(sunLight);
+  hemiLight = new THREE.HemisphereLight(preset.hemi[0], preset.hemi[1], preset.hemi[2]);
+  scene.add(hemiLight);
+  sunLight = new THREE.DirectionalLight(preset.sun[0], preset.sun[1]);
+  sunLight.position.set(-30, 60, -10);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(1024,1024);
+  sunLight.shadow.camera.left = -70; sunLight.shadow.camera.right = 70;
+  sunLight.shadow.camera.top = 70; sunLight.shadow.camera.bottom = -70;
+  sunLight.shadow.camera.far = 200;
+  scene.add(sunLight);
+}
+applyLighting(LIGHT_PRESETS[0]);
+/* ============================================================
+   GUN VIEWMODEL (attached to camera, hidden while scoped)
+   ============================================================ */
+const gunGroup = new THREE.Group();
+let muzzleTip = new THREE.Object3D(); // marks the barrel tip in local gun space, used for flash placement
+(function buildGun(){
+  const metal = new THREE.MeshStandardMaterial({ color:0x22262a, roughness:.5, metalness:.4 });
+  const darkMetal = new THREE.MeshStandardMaterial({ color:0x15171a, roughness:.6, metalness:.3 });
+  const woodMat = new THREE.MeshStandardMaterial({ color:0x4a3524, roughness:.85 });
+  const skinMat = new THREE.MeshStandardMaterial({ color:0xd7a281, roughness:.9 });
+  // barrel + receiver
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.032,1.15,10), darkMetal);
+  barrel.rotation.x = Math.PI/2;
+  barrel.position.set(0, -0.02, -0.75);
+  gunGroup.add(barrel);
+  // marker at the muzzle end of the barrel (local space), used to spawn the flash effect
+  muzzleTip.position.set(0, -0.02, -1.33);
+  gunGroup.add(muzzleTip);
+  const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.11,0.13,0.55), metal);
+  receiver.position.set(0, -0.03, -0.1);
+  gunGroup.add(receiver);
+  // scope on top
+  const scopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,0.42,12), darkMetal);
+  scopeTube.rotation.x = Math.PI/2;
+  scopeTube.position.set(0, 0.09, -0.18);
+  gunGroup.add(scopeTube);
+  const scopeLens = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.02,12), new THREE.MeshBasicMaterial({ color:0x2a6b55 }));
+  scopeLens.rotation.x = Math.PI/2;
+  scopeLens.position.set(0, 0.09, -0.39);
+  gunGroup.add(scopeLens);
+  // stock (angled back toward camera)
+  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.16,0.5), woodMat);
+  stock.position.set(0, -0.06, 0.28);
+  stock.rotation.x = 0.12;
+  gunGroup.add(stock);
+  // bolt handle
+  const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,0.16,8), metal);
+  bolt.rotation.z = Math.PI/2.4;
+  bolt.position.set(0.09, -0.02, 0.05);
+  gunGroup.add(bolt);
+  // bipod legs
+  for (const side of [-1,1]){
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.28,6), darkMetal);
+    leg.position.set(side*0.06, -0.2, -0.55);
+    leg.rotation.z = side*0.35;
+    gunGroup.add(leg);
+  }
+  // forearm/hand (simple, holding the stock)
+  const hand = new THREE.Mesh(new THREE.SphereGeometry(0.07,10,8), skinMat);
+  hand.scale.set(1.3,0.9,1.1);
+  hand.position.set(0.02, -0.14, 0.35);
+  gunGroup.add(hand);
+  const gripHand = new THREE.Mesh(new THREE.SphereGeometry(0.065,10,8), skinMat);
+  gripHand.scale.set(1.1,0.9,1.2);
+  gripHand.position.set(0, -0.13, -0.02);
+  gunGroup.add(gripHand);
+  gunGroup.position.set(0.22, -0.24, -0.55);
+  gunGroup.rotation.y = -0.06;
+  camera.add(gunGroup);
+})();
+scene.add(camera); // camera must be in scene graph for its child (gun) to render
+/* Ground */
+const groundMat = new THREE.MeshStandardMaterial({ color:0x555f57, roughness:1 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(240,240), groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+// faint lane markings so depth reads well
+const laneMat = new THREE.MeshBasicMaterial({ color:0x707c73 });
+for(let i=-100;i<100;i+=10){
+  const seg = new THREE.Mesh(new THREE.PlaneGeometry(0.25,4), laneMat);
+  seg.rotation.x = -Math.PI/2; seg.position.set(0, 0.01, i);
+  scene.add(seg);
+}
+// nest platform (sandbags)
+const bagMat = new THREE.MeshStandardMaterial({ color:0x6b5d43, roughness:1 });
+for(const dx of [-1.6,-0.8,0,0.8,1.6]){
+  const bag = new THREE.Mesh(new THREE.SphereGeometry(0.55,8,6), bagMat);
+  bag.scale.set(1,0.6,0.75);
+  bag.position.set(NEST.x+dx, 0.5, NEST.z-1.2);
+  bag.castShadow = true; bag.receiveShadow = true;
+  scene.add(bag);
+}
+/* ============================================================
+   COVER OBJECT LIBRARY + RANDOM PLACEMENT
+   ============================================================ */
+const COVER_TYPES = {
+  container: { w:2.4, h:2.6, d:6, color:0xb0451f, y:1.3 },
+  wall:       { w:4.5, h:1.6, d:0.4, color:0x8c8478, y:0.8 },
+  crate:      { w:1.2, h:1.2, d:1.2, color:0x9c7a3f, y:0.6 },
+  barrier:    { w:2.0, h:1.0, d:0.6, color:0xaaaaaa, y:0.5 },
+  building:   { w:6,   h:6,   d:5,  color:0x77726a, y:3.0 },
+};
+// Fixed lane of X positions & varied depths -> re-randomized each "environment regen"
+let coverSpots = []; // {x,z,type,mesh,w,d}
+let coverGroup = new THREE.Group();
+scene.add(coverGroup);
+function randRange(a,b){ return a + Math.random()*(b-a); }
+function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function buildCoverMesh(type){
+  const spec = COVER_TYPES[type];
+  const geo = new THREE.BoxGeometry(spec.w, spec.h, spec.d);
+  const mat = new THREE.MeshStandardMaterial({ color:spec.color, roughness:.9 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.position.y = spec.y;
+  return mesh;
+}
+function generateEnvironment(){
+  // clear old
+  coverGroup.clear();
+  coverSpots = [];
+  const typeKeys = Object.keys(COVER_TYPES);
+  const spotCount = 6 + Math.floor(Math.random()*4); // 6-9 pieces of cover
+  const usedX = [];
+  for(let i=0;i<spotCount;i++){
+    const type = choice(typeKeys);
+    let x;
+    let tries = 0;
+    do { x = randRange(-22, 22); tries++; } while (usedX.some(u=>Math.abs(u-x)<4) && tries<20);
+    usedX.push(x);
+    const z = randRange(-6, 22); // depth range in front of nest
+    const mesh = buildCoverMesh(type);
+    mesh.position.x = x;
+    mesh.position.z = z;
+    coverGroup.add(mesh);
+    coverSpots.push({ x, z, type, mesh, w:COVER_TYPES[type].w, d:COVER_TYPES[type].d, h:COVER_TYPES[type].h });
+  }
+  applyLighting(choice(LIGHT_PRESETS));
+}
+generateEnvironment();
+/* ============================================================
+   TARGET (humanoid) BUILD
+   ============================================================ */
+const outfitColors = [0x3a4a2e, 0x2e3440, 0x4a3626, 0x39392f];
+function makeTarget(){
+  const g = new THREE.Group();
+  const outfitColor = choice(outfitColors);
+  const mkMat = (color) => new THREE.MeshStandardMaterial({ color, roughness:.85, transparent:true, opacity:1 });
+  const skinMat = new THREE.MeshStandardMaterial({ color:0xd7a281, roughness:.9, transparent:true, opacity:1 });
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.32,1.05,10), mkMat(outfitColor));
+  torso.position.y = 1.15;
+  torso.castShadow = true;
+  torso.userData.part = 'body';
+  g.add(torso);
+  const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.26,0.4,10), mkMat(outfitColor));
+  hips.position.y = 0.55;
+  hips.castShadow = true;
+  hips.userData.part = 'body';
+  g.add(hips);
+  // legs: pivot at hip so they can actually swing for a walk cycle
+  const legLen = 0.9, legPivotY = 0.5;
+  const legs = [];
+  for (const side of [-1,1]){
+    const pivot = new THREE.Group();
+    pivot.position.set(side*0.13, legPivotY, 0);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,legLen,8), mkMat(outfitColor));
+    leg.position.y = -legLen/2;
+    leg.castShadow = true;
+    leg.userData.part = 'body';
+    pivot.add(leg);
+    g.add(pivot);
+    legs.push(pivot);
+  }
+  // arms: pivot at shoulder, swing opposite the legs
+  const armLen = 0.75, armPivotY = 1.575;
+  const arms = [];
+  for (const side of [-1,1]){
+    const pivot = new THREE.Group();
+    pivot.position.set(side*0.42, armPivotY, 0);
+    pivot.rotation.z = side*0.15;
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,armLen,8), mkMat(outfitColor));
+    arm.position.y = -armLen/2;
+    arm.castShadow = true;
+    arm.userData.part = 'body';
+    pivot.add(arm);
+    g.add(pivot);
+    arms.push(pivot);
+  }
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2,12,10), skinMat);
+  head.position.y = 1.85;
+  head.castShadow = true;
+  head.userData.part = 'head';
+  g.add(head);
+  g.userData.parts = [torso, hips, head];
+  g.userData.legs = legs;
+  g.userData.arms = arms;
+  g.userData.walkPhase = Math.random()*10;
+  g.traverse(o=>{ if(o.isMesh) o.userData.isTarget = true; });
+  return g;
+}
+/* ============================================================
+   GAME STATE
+   ============================================================ */
+const state = {
+  score: 0, kills: 0, headshots: 0,
+  shotsFired: 0, shotsHit: 0,
+  streak: 0,
+  scoped: false,
+  started: false,
+  canFire: true,
+  yaw: 0, pitch: 0,
+  targetGroup: null,
+  targetAlive: false,
+  encounterTimer: null,
+  encounterActions: [],
+  actionIndex: 0,
+  actionStart: 0,
+  actionElapsed: 0,
+  gameTime: 0,
+  freezeUntil: 0,       // hit-stop: while now < this, world simulation dt is zeroed
+  inReplay: false,      // true while the cinematic bullet-cam kill replay is playing
+  bestStreak: 0,        // session-best streak (resets on page reload, no persistence available here)
+  lastStreakTier: 0,    // highest streak-tier banner already shown, so we don't repeat it
+  sessionStart: 0,
+};
+const YAW_LIMIT = 0.85;   // radians left/right from center
+const PITCH_LIMIT = 0.5;
+const MOUSE_SENS = 0.0026;        // radians per pixel of actual mouse movement (unscoped)
+const SCOPE_SENS_MUL = 0.32;      // dampened turn speed while scoped
+function difficulty(){
+  return Math.min(state.score / 5000, 1);
+}
+/* ============================================================
+   LOOK CONTROLS (cursor-offset aiming — no Pointer Lock API needed,
+   since sandboxed/iframe contexts frequently block requestPointerLock)
+   ============================================================ */
+const startScreen = document.getElementById('startScreen');
+const canvasEl = renderer.domElement;
+startScreen.addEventListener('click', () => {
+  state.started = true;
+  state.sessionStart = performance.now();
+  startScreen.style.display = 'none';
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (!state.targetAlive && !state.encounterTimer) {
+    generateEncounter();
+  }
+});
+document.addEventListener('mousemove', (e) => {
+  if (!state.started || state.inReplay) return;
+  const sens = MOUSE_SENS * (state.scoped ? SCOPE_SENS_MUL : 1);
+  state.yaw   -= e.movementX * sens;
+  state.pitch -= e.movementY * sens;
+  state.yaw   = Math.max(-YAW_LIMIT, Math.min(YAW_LIMIT, state.yaw));
+  state.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, state.pitch));
+});
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('mousedown', (e) => {
+  if (!state.started || state.inReplay) return;
+  if (e.button === 2) { // right click = scope
+    setScoped(true);
+  } else if (e.button === 0) { // left click = fire
+    fire();
+  }
+});
+document.addEventListener('mouseup', (e) => {
+  if (state.inReplay) return;
+  if (e.button === 2) setScoped(false);
+});
+const scopeOverlay = document.getElementById('scopeOverlay');
+const crosshair = document.getElementById('crosshair');
+function setScoped(on){
+  state.scoped = on;
+  camera.fov = on ? 16 : 75;
+  camera.updateProjectionMatrix();
+  scopeOverlay.classList.toggle('active', on);
+  crosshair.style.display = on ? 'none' : 'block';
+  gunGroup.visible = !on;
+  if (on) startWind(); else stopWind();
+}
+/* ============================================================
+   ENCOUNTER GENERATION
+   ============================================================ */
+const BEHAVIORS = ["HIDDEN","PEEK","RUN","JUMP","COVER_TO_COVER",
+                    "RUN_AND_CHANGE_DIRECTION","HIDE_THEN_PEEK","RANDOM_MOVEMENT"];
+// Get a hidden slot (behind cover, occluded from nest) and exposed slot (beside cover)
+function hiddenSlotFor(spot){
+  return new THREE.Vector3(spot.x, 0, spot.z + spot.d*0.9 + 0.3);
+}
+function exposedSlotFor(spot, side){
+  return new THREE.Vector3(spot.x + side*(spot.w*0.75+0.6), 0, spot.z);
+}
+function openGroundPoint(){
+  return new THREE.Vector3(randRange(-20,20), 0, randRange(-4, 18));
+}
+function pickSpots(n){
+  const pool = coverSpots.slice();
+  const picked = [];
+  for(let i=0;i<n && pool.length;i++){
+    const idx = Math.floor(Math.random()*pool.length);
+    picked.push(pool.splice(idx,1)[0]);
+  }
+  return picked;
+}
+/* Enforce a believable human sprint speed on every position-changing
+   transition. Previously only segments explicitly flagged run:true were
+   checked, but some sequences (RANDOM_MOVEMENT in particular) could
+   generate an unflagged transition between two far-apart points — that
+   segment kept its short "peek/hide" duration and the target would cover
+   the whole distance in a fraction of a second, reading as a teleport.
+   This now checks every segment's implied speed regardless of its run
+   flag, stretches the duration if needed, and marks it run so the legs
+   actually animate through the correction. */
+const MIN_SPRINT_SPEED = 5.5;  // m/s at difficulty 0 (brisk sprint)
+const MAX_SPRINT_SPEED = 9.0;  // m/s at difficulty 1 (near top human sprint speed)
+function applyRealisticSpeeds(seq){
+  const speed = MIN_SPRINT_SPEED + difficulty()*(MAX_SPRINT_SPEED-MIN_SPRINT_SPEED);
+  let prevPos = seq.length ? seq[0].pos : null;
+  for (let i=1;i<seq.length;i++){
+    const seg = seq[i];
+    if (prevPos){
+      const dist = Math.hypot(seg.pos.x-prevPos.x, seg.pos.z-prevPos.z);
+      const minDur = dist / speed;
+      if (seg.duration < minDur){
+        seg.duration = minDur;
+        if (dist > 1.5) seg.run = true; // force walk-cycle animation so the correction reads as movement, not a slow slide
+      }
+    }
+    prevPos = seg.pos;
+  }
+  return seq;
+}
+// Build a sequence of {pos, duration, jump(optional)} segments given a behavior
+function buildSequence(behavior){
+  const d = difficulty();
+  const speedMul = 1 + d*1.1;              // faster at higher difficulty
+  const hideDur   = () => randRange(2.6,4.2) - d*1.6;
+  const peekDur   = () => Math.max(0.22, randRange(0.9,1.5) - d*0.9);
+  const seq = [];
+  const spotsA = pickSpots(3);
+  const [s1,s2,s3] = spotsA.length ? spotsA : pickSpots(3);
+  switch(behavior){
+    case "HIDDEN": {
+      // mostly stays hidden, one brief peek near the end
+      seq.push({ pos:hiddenSlotFor(s1), duration: Math.max(1.4, hideDur()) });
+      seq.push({ pos:exposedSlotFor(s1, choice([-1,1])), duration: peekDur()*0.7, exposed:true });
+      seq.push({ pos:hiddenSlotFor(s1), duration: 1.5 });
+      break;
+    }
+    case "PEEK": {
+      const peeks = 1 + Math.floor(Math.random()*3);
+      seq.push({ pos:hiddenSlotFor(s1), duration: Math.max(0.8,hideDur()*0.6) });
+      for(let i=0;i<peeks;i++){
+        const side = choice([-1,1]);
+        seq.push({ pos:exposedSlotFor(s1, side), duration: peekDur(), exposed:true });
+        seq.push({ pos:hiddenSlotFor(s1), duration: randRange(0.6,1.4) });
+      }
+      break;
+    }
+    case "RUN": {
+      seq.push({ pos:hiddenSlotFor(s1), duration: 0.9 });
+      seq.push({ pos:exposedSlotFor(s1,1), duration: 0.4, exposed:true });
+      seq.push({ pos:hiddenSlotFor(s2 || s1), duration: randRange(1.6,2.6)/speedMul, run:true });
+      seq.push({ pos:hiddenSlotFor(s2 || s1), duration: 1.2 });
+      break;
+    }
+    case "JUMP": {
+      const barrier = spotsA.find(s=>s.type==='barrier'||s.type==='crate') || s1;
+      seq.push({ pos:hiddenSlotFor(s1), duration: 0.8 });
+      seq.push({ pos:new THREE.Vector3(barrier.x-3, 0, barrier.z+2), duration: 0.5, run:true });
+      seq.push({ pos:new THREE.Vector3(barrier.x, 0, barrier.z), duration: 0.35/speedMul, jump:true, run:true });
+      seq.push({ pos:new THREE.Vector3(barrier.x+3, 0, barrier.z-2), duration: 0.6/speedMul, run:true });
+      seq.push({ pos:hiddenSlotFor(s2||s1), duration: 1.2, run:true });
+      break;
+    }
+    case "COVER_TO_COVER": {
+      const chain = spotsA.length ? spotsA : [s1];
+      chain.forEach((s,i)=>{
+        seq.push({ pos:hiddenSlotFor(s), duration: Math.max(0.7,hideDur()*0.55), run:i>0 });
+        seq.push({ pos:exposedSlotFor(s, choice([-1,1])), duration: peekDur()*0.8, exposed:true });
+      });
+      break;
+    }
+    case "RUN_AND_CHANGE_DIRECTION": {
+      seq.push({ pos:hiddenSlotFor(s1), duration: 0.7 });
+      seq.push({ pos:openGroundPoint(), duration: randRange(0.9,1.4)/speedMul, run:true });
+      seq.push({ pos:openGroundPoint(), duration: randRange(0.7,1.1)/speedMul, run:true }); // sudden reverse
+      seq.push({ pos:hiddenSlotFor(s2||s1), duration: 1.1, run:true });
+      break;
+    }
+    case "HIDE_THEN_PEEK": {
+      seq.push({ pos:hiddenSlotFor(s1), duration: Math.max(1.6,hideDur()) });
+      seq.push({ pos:exposedSlotFor(s1, choice([-1,1])), duration: Math.max(0.9, peekDur()*1.6), exposed:true });
+      seq.push({ pos:hiddenSlotFor(s1), duration: 1.0 });
+      break;
+    }
+    case "RANDOM_MOVEMENT":
+    default: {
+      const steps = 3 + Math.floor(Math.random()*3);
+      let last = s1;
+      for(let i=0;i<steps;i++){
+        const roll = Math.random();
+        if (roll < 0.35){
+          seq.push({ pos:hiddenSlotFor(last), duration: Math.max(0.6,hideDur()*0.5) });
+        } else if (roll < 0.65){
+          seq.push({ pos:exposedSlotFor(last, choice([-1,1])), duration: peekDur(), exposed:true });
+        } else {
+          // Move toward an actual new cover spot instead of an unrelated random
+          // ground point — previously "last" was reassigned to a different
+          // spot than the position that was pushed, so the very next
+          // hidden/peek segment (which is NOT flagged run) would snap to
+          // that spot's slot from wherever the target happened to be.
+          const next = choice(spotsA);
+          seq.push({ pos:hiddenSlotFor(next), duration: randRange(0.7,1.3)/speedMul, run:true });
+          last = next;
+        }
+      }
+      seq.push({ pos:hiddenSlotFor(last), duration: 1.0 });
+    }
+  }
+  return applyRealisticSpeeds(seq);
+}
+function generateEncounter(){
+  if (state.encounterTimer) { clearTimeout(state.encounterTimer); state.encounterTimer = null; }
+  resetTarget();
+  const behavior = choice(BEHAVIORS);
+  const seq = buildSequence(behavior);
+  state.encounterActions = seq;
+  state.actionIndex = 0;
+  state.actionStart = performance.now();
+  state.actionElapsed = 0;
+  state.targetGroup = makeTarget();
+  const startPos = seq[0].pos;
+  state.targetGroup.position.set(startPos.x, 0, startPos.z);
+  scene.add(state.targetGroup);
+  state.targetAlive = true;
+}
+function resetTarget(){
+  if (state.targetGroup){
+    scene.remove(state.targetGroup);
+    state.targetGroup = null;
+  }
+  state.targetAlive = false;
+}
+/* ============================================================
+   TARGET AI TICK
+   ============================================================ */
+function updateTarget(dt){
+  if (!state.targetAlive || !state.targetGroup) return;
+  const seq = state.encounterActions;
+  const action = seq[state.actionIndex];
+  if (!action) {
+    // sequence finished without a kill -> regenerate a fresh encounter shortly
+    endEncounterNoKill();
+    return;
+  }
+  state.actionElapsed += dt;
+  const t = Math.min(1, state.actionElapsed / Math.max(0.05, action.duration));
+  const prevAction = seq[state.actionIndex-1];
+  const fromPos = prevAction ? prevAction.pos : action.pos;
+  const toPos = action.pos;
+  const x = THREE.MathUtils.lerp(fromPos.x, toPos.x, t);
+  const z = THREE.MathUtils.lerp(fromPos.z, toPos.z, t);
+  let y = 0;
+  if (action.jump){
+    y = Math.sin(Math.PI * t) * 1.1;
+  }
+  state.targetGroup.position.set(x, y, z);
+  // face movement direction roughly toward camera lane
+  const dx = toPos.x - fromPos.x;
+  if (Math.abs(dx) > 0.05){
+    state.targetGroup.rotation.y = dx > 0 ? -Math.PI/2 : Math.PI/2;
+  } else {
+    state.targetGroup.rotation.y = Math.PI; // facing away/hidden orientation
+  }
+  // walk-cycle limb animation — legs/arms swing on the move, settle to neutral when stationary
+  const g = state.targetGroup;
+  const legs = g.userData.legs, arms = g.userData.arms;
+  const moving = !!action.run && t < 1;
+  if (moving){
+    g.userData.walkPhase += dt * 12;
+    const swing = Math.sin(g.userData.walkPhase) * 0.7;
+    legs[0].rotation.x = swing;
+    legs[1].rotation.x = -swing;
+    arms[0].rotation.x = -swing*0.8;
+    arms[1].rotation.x = swing*0.8;
+  } else {
+    const ease = Math.min(1, dt*8);
+    legs[0].rotation.x = THREE.MathUtils.lerp(legs[0].rotation.x, 0, ease);
+    legs[1].rotation.x = THREE.MathUtils.lerp(legs[1].rotation.x, 0, ease);
+    arms[0].rotation.x = THREE.MathUtils.lerp(arms[0].rotation.x, 0, ease);
+    arms[1].rotation.x = THREE.MathUtils.lerp(arms[1].rotation.x, 0, ease);
+  }
+  if (t >= 1){
+    state.actionIndex++;
+    state.actionStart = performance.now();
+    state.actionElapsed = 0;
+  }
+}
+function endEncounterNoKill(){
+  const g = state.targetGroup;
+  state.targetAlive = false;
+  state.targetGroup = null;
+  state.streak = Math.max(0, state.streak - 1); // small penalty for letting one go
+  updateHUD();
+  if (g) scene.remove(g); // target's last waypoint is always concealed behind cover, so this is unseen
+  state.encounterTimer = setTimeout(() => {
+    state.encounterTimer = null;
+    generateEncounter();
+  }, 700);
+}
+/* ============================================================
+   SHOOTING / RAYCAST / RAGDOLL
+   ============================================================ */
+const raycaster = new THREE.Raycaster();
+const center = new THREE.Vector2(0,0);
+const FIRE_COOLDOWN = 950; // bolt-action cycle ms
+const boltIndicator = document.getElementById('boltIndicator');
+const flashFlick = document.getElementById('flashFlick');
+let lastShot = null; // {origin, hitPoint} of the most recent shot, used to fly the killcam bullet-cam
+function fire(){
+  if (!state.canFire || state.inReplay) return;
+  state.canFire = false;
+  boltIndicator.classList.add('show');
+  playSfx('gunshot', { rate: 0.97 + Math.random()*0.06, gain: 1 });
+  playSfx('bolt', { rate: 0.98 + Math.random()*0.04, gain: 0.8, delay: 0.14 }); // bolt-cycle clack right after the shot
+  setTimeout(()=>{ state.canFire = true; boltIndicator.classList.remove('show'); }, FIRE_COOLDOWN);
+  state.shotsFired++;
+  recoilKick();
+  raycaster.setFromCamera(center, camera);
+  const hitObjects = [];
+  if (state.targetGroup) state.targetGroup.traverse(o => { if (o.isMesh && o.userData.isTarget) hitObjects.push(o); });
+  hitObjects.push(...coverGroup.children);
+  const camDir = camera.getWorldDirection(new THREE.Vector3());
+  const muzzleOrigin = camera.getWorldPosition(new THREE.Vector3()).add(camDir.clone().multiplyScalar(0.35));
+  const intersects = raycaster.intersectObjects(hitObjects, false);
+  // Always draw a tracer + muzzle flash, whether the shot connects or sails into the distance.
+  const tracerEnd = intersects.length ? intersects[0].point : muzzleOrigin.clone().add(camDir.clone().multiplyScalar(160));
+  lastShot = { origin: muzzleOrigin.clone(), hitPoint: tracerEnd.clone() };
+  spawnTracer(muzzleOrigin, tracerEnd);
+  spawnMuzzleFlash(muzzleOrigin);
+  flickScreen();
+  if (intersects.length === 0){ registerMiss(); updateHUD(); return; }
+  const hit = intersects[0];
+  if (hit.object.userData.isTarget){
+    registerHit(hit.object.userData.part, hit.point);
+    triggerShake(hit.object.userData.part === 'head' ? 0.32 : 0.14);
+  } else {
+    registerMiss(); // blocked by cover
+    spawnImpactPuff(hit.point);
+    spawnBulletMark(hit);
+    triggerShake(0.05);
+  }
+  updateHUD();
+}
+/* Tracer streak from muzzle to point of impact (or into the distance on a miss) */
+function spawnTracer(origin, hitPoint){
+  const dir = new THREE.Vector3().subVectors(hitPoint, origin);
+  const len = dir.length();
+  if (len < 0.01) return;
+  const geo = new THREE.CylinderGeometry(0.012,0.032,len,6,1,true);
+  const mat = new THREE.MeshBasicMaterial({
+    color:0xfff6d8, transparent:true, opacity:1,
+    blending:THREE.AdditiveBlending, depthWrite:false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(origin).add(dir.clone().multiplyScalar(0.5));
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+  scene.add(mesh);
+  const start = performance.now();
+  const DUR = 140;
+  function anim(){
+    const t = (performance.now()-start)/DUR;
+    if (t>=1){ scene.remove(mesh); return; }
+    mesh.material.opacity = 1-t;
+    requestAnimationFrame(anim);
+  }
+  anim();
+}
+/* ------------------------------------------------------------
+   Muzzle flash texture — a soft radial core plus a 4-spike "star"
+   drawn on a canvas so the sprite reads as a flash instead of a
+   flat white square. Built once and reused for every shot; a
+   fresh random rotation per-shot (see spawnMuzzleFlash) keeps it
+   from looking identical every time.
+   ------------------------------------------------------------ */
+function createMuzzleFlashTexture(){
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(size/2, size/2);
+  ctx.globalCompositeOperation = 'lighter';
+  // soft core glow
+  const core = ctx.createRadialGradient(0,0,0, 0,0,size*0.42);
+  core.addColorStop(0,   'rgba(255,255,255,1)');
+  core.addColorStop(0.25,'rgba(255,232,180,0.95)');
+  core.addColorStop(0.6, 'rgba(255,180,90,0.28)');
+  core.addColorStop(1,   'rgba(255,180,90,0)');
+  ctx.fillStyle = core;
+  ctx.beginPath(); ctx.arc(0,0,size*0.42,0,Math.PI*2); ctx.fill();
+  // 4-point star spikes for a classic muzzle-flash silhouette
+  function drawSpike(len, width, rot){
+    ctx.save();
+    ctx.rotate(rot);
+    const g = ctx.createLinearGradient(0,-len,0,len);
+    g.addColorStop(0,   'rgba(255,255,255,0)');
+    g.addColorStop(0.5, 'rgba(255,248,220,0.95)');
+    g.addColorStop(1,   'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(-width,0);
+    ctx.lineTo(0,-len);
+    ctx.lineTo(width,0);
+    ctx.lineTo(0,len);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  drawSpike(size*0.5,  size*0.018, 0);
+  drawSpike(size*0.5,  size*0.018, Math.PI/2);
+  drawSpike(size*0.34, size*0.013, Math.PI/4);
+  drawSpike(size*0.34, size*0.013, -Math.PI/4);
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+const muzzleFlashTexture = createMuzzleFlashTexture();
+/* Muzzle flash: bright additive sprite (star texture, not a flat square) + brief point light at the barrel tip */
+function spawnMuzzleFlash(origin){
+  const flashMat = new THREE.SpriteMaterial({
+    map: muzzleFlashTexture,
+    color:0xfff4c2, transparent:true, opacity:1,
+    depthTest:false, blending:THREE.AdditiveBlending, rotation: Math.random()*Math.PI*2
+  });
+  const flash = new THREE.Sprite(flashMat);
+  flash.scale.set(0.6,0.6,0.6);
+  flash.position.copy(origin);
+  scene.add(flash);
+  const light = new THREE.PointLight(0xffcf8a, 7, 9, 2);
+  light.position.copy(origin);
+  scene.add(light);
+  const start = performance.now();
+  const DUR = 90;
+  function anim(){
+    const t = (performance.now()-start)/DUR;
+    if (t>=1){ scene.remove(flash); scene.remove(light); return; }
+    flash.scale.setScalar(0.6*(1+t*0.5));
+    flash.material.opacity = 1-t;
+    light.intensity = 7*(1-t);
+    requestAnimationFrame(anim);
+  }
+  anim();
+}
+/* Quick full-screen flick to sell the flash even against the sky/fog */
+function flickScreen(){
+  flashFlick.style.transition = 'none';
+  flashFlick.style.opacity = '0.16';
+  requestAnimationFrame(()=>{
+    flashFlick.style.transition = 'opacity 110ms ease-out';
+    flashFlick.style.opacity = '0';
+  });
+}
+/* Persistent bullet-mark decals on cover surfaces (capped pool) */
+const bulletMarks = [];
+function spawnBulletMark(hit){
+  if (!hit.face) return;
+  const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+  const geo = new THREE.CircleGeometry(0.07, 10);
+  const mat = new THREE.MeshBasicMaterial({ color:0x161514, transparent:true, opacity:0.85, depthWrite:false });
+  const mark = new THREE.Mesh(geo, mat);
+  mark.position.copy(hit.point).add(normal.clone().multiplyScalar(0.012));
+  mark.lookAt(hit.point.clone().add(normal));
+  scene.add(mark);
+  bulletMarks.push(mark);
+  if (bulletMarks.length > 40){
+    const old = bulletMarks.shift();
+    scene.remove(old);
+  }
+}
+function recoilKick(){
+  if (!gunGroup.visible) return; // scoped: no viewmodel kick, keep sight steady
+  const baseZ = gunGroup.position.z;
+  const start = performance.now();
+  const DUR = 180;
+  function anim(){
+    const t = Math.min(1, (performance.now()-start)/DUR);
+    const k = Math.sin(t*Math.PI) * 0.09;
+    gunGroup.position.z = baseZ + k;
+    if (t < 1) requestAnimationFrame(anim);
+    else gunGroup.position.z = baseZ;
+  }
+  anim();
+}
+/* Camera shake — bigger on headshots, subtle on body hits/cover hits */
+let shakeTime = 0, shakeMag = 0, shakeDur = 0.25;
+function triggerShake(mag){ shakeMag = mag; shakeTime = shakeDur; }
+function registerMiss(){
+  if (state.streak >= 5) showStreakBrokenTag();
+  playMissThud();
+  state.streak = 0;
+  updateHUD();
+}
+/* Risk/reward: a kill scored while the target is in a short, "exposed" window
+   (mid-peek, not safely hidden) pays extra — the shorter the window, the bigger
+   the bonus. Rewards taking the harder, riskier shot instead of waiting it out. */
+function computeExposureBonus(action){
+  if (!action || !action.exposed) return 0;
+  const dur = action.duration;
+  const bonus = Math.round(Math.max(0, 1.5 - dur) * 260);
+  return bonus;
+}
+/* Streak tiers: cross one of these thresholds and get a banner + stinger +
+   HUD flash + escalating color, instead of just watching a number tick up. */
+const STREAK_TIERS = [5, 10, 20, 35, 50, 75, 100];
+function checkStreakTier(){
+  const hit = STREAK_TIERS.find(t => t === state.streak && t > state.lastStreakTier);
+  if (hit){
+    state.lastStreakTier = hit;
+    showStreakBanner(hit);
+    playStreakStinger(hit);
+    flashStreakHUD(hit);
+  }
+  if (state.streak > state.bestStreak) state.bestStreak = state.streak;
+}
+function registerHit(part, worldPoint){
+  state.shotsHit++;
+  const headshot = part === 'head';
+  if (headshot) playHeadshotThock();
+  const currentAction = state.encounterActions[state.actionIndex];
+  const exposureBonus = computeExposureBonus(currentAction);
+  const base = headshot ? 1000 : 400;
+  const streakBonus = Math.floor(state.streak * (headshot? 60:25));
+  const gained = base + streakBonus + exposureBonus;
+  state.score += gained;
+  state.kills += 1;
+  if (headshot) state.headshots += 1;
+  state.streak += 1;
+  checkStreakTier();
+  // "Exceptional" kill: a headshot that's either long-range or a very tight peek window.
+  // Highlighted with a hit-stop freeze followed by a brief slow-motion tail (dt scaled down
+  // in the main loop) plus a banner/sting — a lightweight stand-in for a full instant-replay
+  // killcam. A true frame-by-frame replay of the actual camera/target transforms would be a
+  // bigger build — happy to do that next if this beat isn't punchy enough on its own.
+  const dist = Math.hypot(worldPoint.x - NEST.x, worldPoint.z - NEST.z);
+  const isLongRange = dist > 24;
+  const isQuickPeek = !!(currentAction && currentAction.exposed && currentAction.duration < 0.45);
+  const isExceptional = headshot && (isLongRange || isQuickPeek);
+  const label = exposureBonus > 0 ? `+${gained} (QUICK PEEK +${exposureBonus})` : `+${gained}`;
+  showFloatText(headshot ? 'HEADSHOT' : 'HIT', label, headshot);
+  // Hit-stop: freeze the world for ~60-80ms on a headshot kill before the ragdoll/replay plays.
+  const freezeMs = headshot ? 70 : 0;
+  if (isExceptional){
+    state.freezeUntil = performance.now() + freezeMs;
+    playExceptionalSting();
+    showKillcamBanner(isLongRange ? 'LONG RANGE KILL' : 'QUICKSCOPE');
+    setTimeout(() => startKillcamReplay(headshot, isLongRange), freezeMs);
+  } else if (freezeMs > 0){
+    state.freezeUntil = performance.now() + freezeMs;
+    setTimeout(() => ragdollAndClear(), freezeMs);
+  } else {
+    ragdollAndClear();
+  }
+}
+/* Plays the target's fall animation only — does not schedule the next encounter.
+   Used both by the normal kill path (ragdollAndClear, below) and by the killcam
+   replay, which needs to control when the next encounter is scheduled itself. */
+function startRagdollFall(){
+  const g = state.targetGroup;
+  state.targetAlive = false;
+  if (!g) return;
+  const startRotX = g.rotation.x;
+  const fallDir = choice([-1,1]);
+  const startTime = performance.now();
+  const DUR = 550;
+  function animateFall(){
+    const t = Math.min(1, (performance.now()-startTime)/DUR);
+    g.rotation.x = THREE.MathUtils.lerp(startRotX, fallDir*Math.PI/2, t);
+    g.position.y = THREE.MathUtils.lerp(g.position.y, -0.15, t);
+    if (t < 1){ requestAnimationFrame(animateFall); }
+    else {
+      setTimeout(()=>{
+        scene.remove(g);
+        if (state.targetGroup === g) state.targetGroup = null;
+      }, 700);
+    }
+  }
+  animateFall();
+}
+function ragdollAndClear(){
+  startRagdollFall();
+  scheduleNextEncounter();
+}
+/* ============================================================
+   KILL REPLAY — cinematic bullet-cam
+   Rides a virtual camera alongside the actual recorded shot (muzzle
+   origin -> impact point) in slow motion, then holds on the target as
+   it falls, before cutting back to the player's own view. Distinct
+   from the earlier "hit-stop only" version: this is a real replay of
+   the specific shot that was just fired, not a canned effect.
+   ============================================================ */
+const cineBars = document.getElementById('cineBars');
+const replayLabel = document.getElementById('replayLabel');
+/* Visible projectile for the bullet-cam — the muzzle tracer only lives ~140ms
+   at the moment of firing, so by the time the slow-mo replay camera catches
+   up there was nothing left to see. This spawns an actual bullet+trail mesh
+   that travels the real origin->impact path in sync with the replay camera,
+   and gets removed the instant it "lands". */
+function spawnKillcamBullet(dir){
+  const group = new THREE.Group();
+  const bulletMat = new THREE.MeshBasicMaterial({ color:0xfff6d8 });
+  const bullet = new THREE.Mesh(new THREE.SphereGeometry(0.045,8,6), bulletMat);
+  group.add(bullet);
+  const trailLen = 1.4;
+  const trailMat = new THREE.MeshBasicMaterial({ color:0xfff2c8, transparent:true, opacity:0.5, blending:THREE.AdditiveBlending, depthWrite:false });
+  const trail = new THREE.Mesh(new THREE.CylinderGeometry(0.006,0.05,trailLen,8,1,true), trailMat);
+  trail.rotation.x = Math.PI/2;
+  trail.position.set(0,0,-trailLen/2 - 0.05); // trails behind the bullet's direction of travel
+  group.add(trail);
+  const light = new THREE.PointLight(0xfff2c8, 2.5, 3, 2);
+  group.add(light);
+  group.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), dir.clone().normalize());
+  group.userData.isKillcamBullet = true;
+  scene.add(group);
+  return group;
+}
+function startKillcamReplay(headshot, isLongRange){
+  if (!lastShot){ ragdollAndClear(); return; } // no recorded shot to replay — just proceed normally
+  state.inReplay = true;
+  shakeTime = 0; // don't let a leftover camera shake jolt the cinematic camera
+  document.body.classList.add('replay-active');
+  cineBars.classList.add('show');
+  replayLabel.textContent = isLongRange ? 'LONG RANGE KILL — REPLAY' : 'QUICKSCOPE — REPLAY';
+  replayLabel.classList.add('show');
+  gunGroup.visible = false;
+  camera.fov = 62;
+  camera.updateProjectionMatrix();
+
+  const origin = lastShot.origin.clone();
+  const impact = lastShot.hitPoint.clone();
+  const dir = impact.clone().sub(origin);
+  const dist = Math.max(0.001, dir.length());
+  dir.normalize();
+  const up = new THREE.Vector3(0,1,0);
+  let right = new THREE.Vector3().crossVectors(dir, up);
+  if (right.lengthSq() < 0.0001) right.set(1,0,0); else right.normalize();
+
+  const TRAVEL_MS = Math.min(1500, Math.max(650, dist * 28)); // longer shots get a slightly longer flight
+  const IMPACT_HOLD_MS = 700;
+  const startTime = performance.now();
+  let ragdollTriggered = false;
+  playBulletWhiz(TRAVEL_MS / 1000);
+  const killcamBullet = spawnKillcamBullet(dir);
+
+  function frame(){
+    if (!state.inReplay) return; // safety, in case something else cancels the replay
+    const now = performance.now();
+    const elapsed = now - startTime;
+    if (elapsed <= TRAVEL_MS){
+      const t = elapsed / TRAVEL_MS;
+      const ease = t*t*(3-2*t); // smoothstep — accelerates into, decelerates out of the flight
+      const lateral = (1-ease) * 1.4 + 0.5;   // camera rides beside the bullet, closing in as it nears the target
+      const height = (1-ease) * 0.9 + 0.35;
+      const pathPos = origin.clone().lerp(impact, ease);
+      killcamBullet.position.copy(pathPos);
+      const camPos = pathPos.clone()
+        .add(right.clone().multiplyScalar(lateral))
+        .add(up.clone().multiplyScalar(height));
+      const lookPos = origin.clone().lerp(impact, Math.min(1, ease + 0.12));
+      camera.up.copy(up);
+      camera.position.copy(camPos);
+      camera.lookAt(lookPos);
+      requestAnimationFrame(frame);
+    } else {
+      if (!ragdollTriggered){
+        ragdollTriggered = true;
+        scene.remove(killcamBullet); // bullet has "landed" — swap to the impact hold
+        playKillcamImpact();
+        startRagdollFall();
+      }
+      const holdElapsed = elapsed - TRAVEL_MS;
+      const ht = Math.min(1, holdElapsed / IMPACT_HOLD_MS);
+      const pullBack = 1.6 + ht*1.4; // settle into a pulled-back angle watching the target fall
+      const punch = Math.max(0, 1-ht*4) * 0.05; // brief impact jitter, decays fast
+      const camPos = impact.clone()
+        .add(right.clone().multiplyScalar(pullBack + (Math.random()-0.5)*punch))
+        .add(up.clone().multiplyScalar(1.1 + ht*0.6 + (Math.random()-0.5)*punch));
+      camera.up.copy(up);
+      camera.position.copy(camPos);
+      camera.lookAt(impact.clone().add(up.clone().multiplyScalar(-0.3)));
+      if (ht < 1){
+        requestAnimationFrame(frame);
+      } else {
+        endKillcamReplay();
+      }
+    }
+  }
+  requestAnimationFrame(frame);
+}
+function endKillcamReplay(){
+  state.inReplay = false;
+  // safety: if the replay got cut short before the bullet "landed" naturally,
+  // sweep any leftover killcam bullet meshes out of the scene
+  scene.children.filter(o => o.userData && o.userData.isKillcamBullet).forEach(o => scene.remove(o));
+  document.body.classList.remove('replay-active');
+  cineBars.classList.remove('show');
+  replayLabel.classList.remove('show');
+  camera.fov = state.scoped ? 16 : 75;
+  camera.updateProjectionMatrix();
+  camera.position.copy(NEST);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = BASE_YAW + state.yaw;
+  camera.rotation.x = state.pitch;
+  gunGroup.visible = !state.scoped;
+  scheduleNextEncounter();
+}
+function scheduleNextEncounter(){
+  if (state.encounterTimer) clearTimeout(state.encounterTimer);
+  state.encounterTimer = setTimeout(() => {
+    state.encounterTimer = null;
+    generateEncounter();
+  }, 1100);
+}
+/* Impact puff for missed shots hitting cover */
+const puffs = [];
+function spawnImpactPuff(point){
+  const geo = new THREE.SphereGeometry(0.06,6,6);
+  const mat = new THREE.MeshBasicMaterial({ color:0xf2e6c8, transparent:true, opacity:0.9 });
+  const p = new THREE.Mesh(geo, mat);
+  p.position.copy(point);
+  scene.add(p);
+  puffs.push({ mesh:p, born:performance.now() });
+}
+function updatePuffs(){
+  const now = performance.now();
+  for (let i=puffs.length-1;i>=0;i--){
+    const pf = puffs[i];
+    const t = (now-pf.born)/400;
+    if (t>=1){ scene.remove(pf.mesh); puffs.splice(i,1); continue; }
+    pf.mesh.scale.setScalar(1+t*3);
+    pf.mesh.material.opacity = 0.9*(1-t);
+  }
+}
+/* Floating damage text */
+function showFloatText(title, sub, headshot){
+  const el = document.createElement('div');
+  el.className = 'float-text';
+  el.style.left = '50%';
+  el.style.top = '46%';
+  el.style.fontSize = headshot ? '30px' : '22px';
+  el.style.color = headshot ? '#ff5c33' : '#c8ffe0';
+  el.innerHTML = `${title}<br><span style="font-size:.7em">${sub}</span>`;
+  document.body.appendChild(el);
+  const start = performance.now();
+  function anim(){
+    const t = (performance.now()-start)/900;
+    if (t>=1){ el.remove(); return; }
+    el.style.transform = `translate(-50%, calc(-50% - ${t*40}px))`;
+    el.style.opacity = String(1-t);
+    requestAnimationFrame(anim);
+  }
+  anim();
+}
+/* Streak-tier banner: colors escalate from cool to hot as tiers climb */
+const TIER_COLORS = {
+  5:  '#9fd6b8', 10: '#c8ffe0', 20: '#ffd76b',
+  35: '#ff9a5c', 50: '#ff5c33', 75: '#ff3b3b', 100: '#ff2e9a'
+};
+function showStreakBanner(tier){
+  const el = document.createElement('div');
+  el.className = 'banner';
+  const color = TIER_COLORS[tier] || '#ff5c33';
+  el.style.color = color;
+  el.innerHTML = `<div class="banner-title">x${tier} STREAK</div><div class="banner-sub">ON FIRE</div>`;
+  document.body.appendChild(el);
+  const start = performance.now();
+  const DUR = 1100;
+  function anim(){
+    const t = (performance.now()-start)/DUR;
+    if (t>=1){ el.remove(); return; }
+    // punch in, hold, fade out
+    const scale = t < 0.15 ? 0.7 + (t/0.15)*0.4 : (t > 0.75 ? 1.1 - ((t-0.75)/0.25)*0.3 : 1.1);
+    const opacity = t < 0.1 ? t/0.1 : (t > 0.8 ? 1-((t-0.8)/0.2) : 1);
+    el.style.transform = `translate(-50%,-50%) scale(${scale})`;
+    el.style.opacity = String(opacity);
+    requestAnimationFrame(anim);
+  }
+  anim();
+}
+/* HUD flash tied to the streak tier's color, plus a matching glow pulse on the streak number */
+const streakFlashEl = document.getElementById('streakFlash');
+let streakGlowTimer = null;
+function flashStreakHUD(tier){
+  const color = TIER_COLORS[tier] || '#ff5c33';
+  streakFlashEl.style.transition = 'none';
+  streakFlashEl.style.background = `radial-gradient(circle at center, ${color}33 0%, ${color}00 70%)`;
+  streakFlashEl.style.opacity = '1';
+  requestAnimationFrame(()=>{
+    streakFlashEl.style.transition = 'opacity 450ms ease-out';
+    streakFlashEl.style.opacity = '0';
+  });
+  streakVal.style.color = color;
+  streakVal.style.textShadow = `0 0 26px ${color}`;
+  if (streakGlowTimer) clearTimeout(streakGlowTimer);
+  streakGlowTimer = setTimeout(()=>{ streakVal.style.color=''; streakVal.style.textShadow=''; }, 900);
+}
+/* Exceptional-kill highlight banner, paired with the hit-stop/slow-mo beat in registerHit */
+function showKillcamBanner(label){
+  const el = document.createElement('div');
+  el.className = 'banner';
+  el.style.top = '30%';
+  el.style.color = '#ffd76b';
+  el.innerHTML = `<div class="banner-title" style="font-size:26px;">${label}</div>`;
+  document.body.appendChild(el);
+  const tint = document.getElementById('killTint');
+  tint.style.transition = 'none';
+  tint.style.opacity = '1';
+  requestAnimationFrame(()=>{ tint.style.transition = 'opacity 500ms ease-out'; tint.style.opacity = '0'; });
+  const start = performance.now();
+  const DUR = 750;
+  function anim(){
+    const t = (performance.now()-start)/DUR;
+    if (t>=1){ el.remove(); return; }
+    const scale = t < 0.2 ? 0.7 + (t/0.2)*0.35 : 1.05;
+    const opacity = t < 0.12 ? t/0.12 : (t > 0.75 ? 1-((t-0.75)/0.25) : 1);
+    el.style.transform = `translate(-50%,-50%) scale(${scale})`;
+    el.style.opacity = String(opacity);
+    requestAnimationFrame(anim);
+  }
+  anim();
+}
+/* Small negative cue when a good streak gets dropped by a miss */
+function showStreakBrokenTag(){
+  const el = document.createElement('div');
+  el.className = 'float-text';
+  el.style.left = '50%';
+  el.style.top = '58%';
+  el.style.fontSize = '16px';
+  el.style.color = '#8a97a0';
+  el.innerHTML = 'STREAK BROKEN';
+  document.body.appendChild(el);
+  const start = performance.now();
+  function anim(){
+    const t = (performance.now()-start)/700;
+    if (t>=1){ el.remove(); return; }
+    el.style.transform = `translate(-50%, calc(-50% + ${t*16}px))`;
+    el.style.opacity = String(1-t);
+    requestAnimationFrame(anim);
+  }
+  anim();
+}
+/* New best-score banner */
+function showNewBestBanner(){
+  const el = document.createElement('div');
+  el.className = 'banner';
+  el.style.top = '22%';
+  el.style.color = '#ffd76b';
+  el.innerHTML = `<div class="banner-title" style="font-size:24px;">NEW BEST SCORE</div>`;
+  document.body.appendChild(el);
+  const start = performance.now();
+  const DUR = 1300;
+  function anim(){
+    const t = (performance.now()-start)/DUR;
+    if (t>=1){ el.remove(); return; }
+    const scale = t < 0.15 ? 0.7+(t/0.15)*0.4 : (t>0.8?1.1-((t-0.8)/0.2)*0.3:1.1);
+    const opacity = t<0.1? t/0.1 : (t>0.85?1-((t-0.85)/0.15):1);
+    el.style.transform = `translate(-50%,-50%) scale(${scale})`;
+    el.style.opacity = String(opacity);
+    requestAnimationFrame(anim);
+  }
+  anim();
+}
+/* ============================================================
+   PERSISTENT BEST SCORE (localStorage) — trivial "one more try" hook
+   ============================================================ */
+const BEST_SCORE_KEY = 'overwatchSniperBestScore';
+const bestScoreVal = document.getElementById('bestScoreVal');
+let bestScore = parseInt(localStorage.getItem(BEST_SCORE_KEY) || '0', 10) || 0;
+const previousBest = bestScore; // this session's record to beat
+let newBestAnnounced = false;
+bestScoreVal.textContent = bestScore.toLocaleString();
+function checkBestScore(){
+  if (state.score > bestScore){
+    bestScore = state.score;
+    localStorage.setItem(BEST_SCORE_KEY, String(bestScore));
+    bestScoreVal.textContent = bestScore.toLocaleString();
+    if (state.score > previousBest && !newBestAnnounced){
+      newBestAnnounced = true;
+      showNewBestBanner();
+    }
+  }
+}
+/* ============================================================
+   HUD UPDATE
+   ============================================================ */
+const scoreVal = document.getElementById('scoreVal');
+const killsVal = document.getElementById('killsVal');
+const hsVal = document.getElementById('hsVal');
+const streakVal = document.getElementById('streakVal');
+const accVal = document.getElementById('accVal');
+const tpmVal = document.getElementById('tpmVal');
+const bestStreakVal = document.getElementById('bestStreakVal');
+function updateSessionHUD(){
+  const elapsedMin = state.sessionStart ? Math.max(1/60, (performance.now()-state.sessionStart)/60000) : 1/60;
+  const tpm = state.sessionStart ? state.kills/elapsedMin : 0;
+  tpmVal.textContent = tpm.toFixed(1);
+  bestStreakVal.textContent = state.bestStreak;
+}
+function updateHUD(){
+  scoreVal.textContent = state.score.toLocaleString();
+  killsVal.textContent = state.kills;
+  hsVal.textContent = state.headshots;
+  streakVal.textContent = 'x' + state.streak;
+  streakVal.style.transform = 'scale(1.25)';
+  setTimeout(()=>{ streakVal.style.transform = 'scale(1)'; }, 120);
+  const acc = state.shotsFired ? Math.round(100*state.shotsHit/state.shotsFired) : 0;
+  accVal.textContent = acc + '%';
+  checkBestScore();
+  updateSessionHUD();
+}
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+let lastTime = performance.now();   
+function animate(){
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  const rawDt = Math.min(0.05, (now-lastTime)/1000);
+  lastTime = now;
+  if (state.inReplay){
+    // The killcam's own rAF loop (startKillcamReplay) fully owns the camera
+    // and the target's ragdoll fall while a replay is playing — just keep
+    // ambient effects fading and keep rendering.
+    updatePuffs();
+    renderer.render(scene, camera);
+    return;
+  }
+  // Hit-stop: while frozen, world simulation dt is zeroed so the game visibly
+  // holds still on the kill frame for ~60-80ms before the ragdoll/replay plays.
+  const frozen = now < state.freezeUntil;
+  const dt = frozen ? 0 : rawDt;
+  state.gameTime += dt;
+  // periodically re-randomize the wider environment (every ~40s) without disrupting an active encounter
+  if (!state.targetAlive && Math.random() < 0.0018) generateEnvironment();
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = BASE_YAW + state.yaw;
+  camera.rotation.x = state.pitch;
+  // apply/decay camera shake (uses real time so it isn't stretched by hit-stop)
+  if (shakeTime > 0){
+    shakeTime = Math.max(0, shakeTime - rawDt);
+    const k = shakeMag * (shakeTime/shakeDur);
+    camera.position.set(
+      NEST.x + (Math.random()-0.5)*k,
+      NEST.y + (Math.random()-0.5)*k,
+      NEST.z + (Math.random()-0.5)*k*0.4
+    );
+  } else if (!camera.position.equals(NEST)){
+    camera.position.copy(NEST);
+  }
+  updateTarget(dt);
+  updatePuffs();    
+  renderer.render(scene, camera);
+}
+animate();
+})();
+</script>
+</body>
+</html>
