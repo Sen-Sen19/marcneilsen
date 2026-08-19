@@ -2,165 +2,1172 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>3D-ish Dart Shooter — Pixi + Matter.js</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DART ALLEY // one more leg</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  html, body { margin:0; padding:0; background:#0b1220; overflow:hidden; }
-  canvas { display:block; }
-  .ui { position:absolute; top:10px; left:10px; color:#ddd; font-family:sans-serif; }
-  .ui button { background:#1e293b; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; }
+  :root{
+    --bg-0:#120d0a;
+    --bg-1:#1c140f;
+    --amber:#e8a13d;
+    --amber-soft:rgba(232,161,61,.35);
+    --brass:#c9962c;
+    --chalk:#f3ead9;
+    --chalk-dim:#a89a86;
+    --panel-bg:rgba(20,14,10,.82);
+    --panel-border:rgba(232,161,61,.18);
+    --good:#7bc47f;
+    --bad:#d9534f;
+    --radius:14px;
+    --font-display:'Oswald', sans-serif;
+    --font-body:'Inter', sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+
+  html,body{
+    margin:0;
+    height:100%;
+    background:var(--bg-0);
+    overflow:hidden;
+    font-family:var(--font-body);
+    color:var(--chalk);
+    -webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none;
+    user-select:none;
+  }
+
+  canvas{
+    display:block;
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    touch-action:none;
+  }
+
+  .vignette{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:5;
+    background:radial-gradient(ellipse at 50% 38%, transparent 38%, rgba(8,5,3,.62) 100%);
+  }
+
+  .grain{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:4;
+    opacity:.035;
+    background-image:radial-gradient(rgba(255,255,255,.9) 1px, transparent 1px);
+    background-size:3px 3px;
+  }
+
+  /* ---------- HUD ---------- */
+
+  .hud{
+    position:fixed;
+    top:0; left:0; right:0;
+    z-index:20;
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 18px 0;
+    pointer-events:none;
+  }
+
+  .hud-block{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+
+  .hud-block--right{ align-items:flex-end; text-align:right; }
+
+  .hud-label{
+    font-family:var(--font-display);
+    font-size:10px;
+    letter-spacing:.18em;
+    color:var(--chalk-dim);
+    text-transform:uppercase;
+  }
+
+  .hud-value{
+    font-family:var(--font-display);
+    font-size:30px;
+    font-weight:600;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:.01em;
+    color:var(--chalk);
+    text-shadow:0 0 18px rgba(232,161,61,.25);
+  }
+
+  .hud-center{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+  }
+
+  .round-label{
+    font-family:var(--font-display);
+    font-size:11px;
+    letter-spacing:.16em;
+    color:var(--chalk-dim);
+    text-transform:uppercase;
+  }
+
+  .dart-pips{
+    display:flex;
+    gap:7px;
+  }
+
+  .dart-pip{
+    width:9px;
+    height:20px;
+    border-radius:2px;
+    background:var(--amber);
+    box-shadow:0 0 8px var(--amber-soft);
+    transform-origin:bottom center;
+    transition:opacity .2s ease, transform .2s ease;
+  }
+
+  .dart-pip.used{
+    opacity:.18;
+    background:var(--chalk-dim);
+    box-shadow:none;
+    transform:scaleY(.6);
+  }
+
+  .icon-btn{
+    position:fixed;
+    top:calc(env(safe-area-inset-top,0px) + 14px);
+    right:16px;
+    z-index:25;
+    width:36px;
+    height:36px;
+    border-radius:50%;
+    border:1px solid var(--panel-border);
+    background:var(--panel-bg);
+    backdrop-filter:blur(8px);
+    color:var(--chalk);
+    font-size:14px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+  }
+  .icon-btn:active{ transform:scale(.92); }
+
+  /* ---------- streak banner ---------- */
+
+  .streak-banner{
+    position:fixed;
+    top:96px;
+    left:50%;
+    transform:translateX(-50%) translateY(-6px);
+    z-index:18;
+    font-family:var(--font-display);
+    font-size:13px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    background:rgba(20,14,10,.7);
+    border:1px solid var(--panel-border);
+    padding:5px 14px;
+    border-radius:20px;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease;
+  }
+  .streak-banner.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ---------- panels ---------- */
+
+  .center-stage{
+    position:fixed;
+    inset:0;
+    z-index:30;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    pointer-events:none;
+  }
+
+  .panel{
+    pointer-events:auto;
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    backdrop-filter:blur(14px);
+    border-radius:var(--radius);
+    padding:34px 30px;
+    text-align:center;
+    max-width:360px;
+    width:calc(100vw - 48px);
+    box-shadow:0 24px 70px rgba(0,0,0,.55);
+  }
+
+  .panel[hidden]{ display:none; }
+
+  h1.title{
+    margin:0 0 6px;
+    font-family:var(--font-display);
+    font-size:42px;
+    font-weight:700;
+    letter-spacing:.04em;
+    color:var(--chalk);
+    text-shadow:0 0 26px var(--amber-soft);
+  }
+
+  h1.title span{ color:var(--amber); }
+
+  .sub{
+    margin:0 0 22px;
+    font-size:13px;
+    color:var(--chalk-dim);
+    line-height:1.55;
+  }
+
+  .controls-hint{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    margin-bottom:22px;
+    font-size:11.5px;
+    color:var(--chalk-dim);
+  }
+
+  .controls-hint span{
+    background:rgba(255,255,255,.04);
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    padding:7px 10px;
+  }
+
+  .primary-btn{
+    appearance:none;
+    border:none;
+    border-radius:10px;
+    padding:13px 34px;
+    font-family:var(--font-display);
+    font-size:15px;
+    font-weight:600;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:#221204;
+    background:linear-gradient(180deg, #f0b555, var(--brass));
+    box-shadow:0 8px 24px rgba(201,150,44,.35);
+    cursor:pointer;
+    transition:transform .12s ease;
+  }
+  .primary-btn:active{ transform:scale(.96); }
+
+  .stats-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px 20px;
+    margin:18px 0 26px;
+    text-align:left;
+  }
+
+  .stat-row{ display:flex; flex-direction:column; gap:2px; }
+
+  .stat-row .n{
+    font-family:var(--font-display);
+    font-size:24px;
+    font-weight:600;
+    color:var(--chalk);
+  }
+
+  .stat-row .l{
+    font-size:10px;
+    letter-spacing:.12em;
+    color:var(--chalk-dim);
+    text-transform:uppercase;
+  }
+
+  .new-best{
+    display:inline-block;
+    margin-bottom:12px;
+    font-family:var(--font-display);
+    font-size:11px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--amber);
+    padding:4px 12px;
+    border:1px solid var(--amber);
+    border-radius:20px;
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    .dart-pip{ transition:none; }
+  }
 </style>
 </head>
 <body>
-<div class="ui">
-  <p>Swipe to throw a dart 🎯 (forward into screen)</p>
-  <button id="reset">Reset</button>
+
+<canvas id="game"></canvas>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<header class="hud">
+  <div class="hud-block">
+    <span class="hud-label">Score</span>
+    <span class="hud-value" id="scoreVal">0</span>
+  </div>
+
+  <div class="hud-center">
+    <span class="round-label" id="roundLabel">Round 1 / 10</span>
+    <div class="dart-pips" id="dartPips">
+      <div class="dart-pip"></div>
+      <div class="dart-pip"></div>
+      <div class="dart-pip"></div>
+    </div>
+  </div>
+
+  <div class="hud-block hud-block--right">
+    <span class="hud-label">Best</span>
+    <span class="hud-value" id="bestVal">0</span>
+  </div>
+</header>
+
+<button class="icon-btn" id="muteBtn" aria-label="Mute sound">🔊</button>
+<div class="streak-banner" id="streakBanner">Hot streak x2</div>
+
+<div class="center-stage">
+  <div class="panel" id="startPanel">
+    <h1 class="title">DART <span>ALLEY</span></h1>
+    <p class="sub">Ten rounds, three darts each. No aim assist — you have to feel the throw.</p>
+    <div class="controls-hint">
+      <span>Swipe upward like you're actually throwing</span>
+      <span>Angle steers left/right · swipe length is your power</span>
+      <span>A straight, smooth swipe lands truer than a wild flick</span>
+    </div>
+    <button class="primary-btn" id="startBtn">Start</button>
+  </div>
+
+  <div class="panel" id="overPanel" hidden>
+    <span class="new-best" id="newBestTag" hidden>New best</span>
+    <h1 class="title" style="font-size:32px;">LEG <span>OVER</span></h1>
+    <div class="stats-grid">
+      <div class="stat-row"><span class="n" id="finalScore">0</span><span class="l">Total score</span></div>
+      <div class="stat-row"><span class="n" id="finalBestRound">0</span><span class="l">Best round</span></div>
+      <div class="stat-row"><span class="n" id="finalBulls">0</span><span class="l">Bullseyes</span></div>
+      <div class="stat-row"><span class="n" id="finalTreble">0</span><span class="l">Trebles</span></div>
+    </div>
+    <button class="primary-btn" id="retryBtn">Throw again</button>
+  </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.x/dist/pixi.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
 <script>
-const { Engine, Runner, Bodies, Body, Events, Composite } = Matter;
+(() => {
+  'use strict';
 
-// --- Pixi ---
-const app = new PIXI.Application({ background:'#0b1220', resizeTo:window, antialias:true });
-document.body.appendChild(app.view);
+  // ============================================================
+  // SETUP
+  // ============================================================
 
-// --- Matter ---
-const engine = Engine.create();
-const world = engine.world;
-world.gravity.y = 1;
-const runner = Runner.create();
-Runner.run(runner, engine);
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0;
 
-// --- Layers ---
-const stage = app.stage;
-const dartsLayer = new PIXI.Container();
-const fxLayer = new PIXI.Container();
-stage.addChild(dartsLayer, fxLayer);
+  function resize(){
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    layoutBoard();
+  }
 
-// --- Ground ---
-const groundH = 60;
-const ground = Bodies.rectangle(app.view.width/2, app.view.height-groundH/2, app.view.width*2, groundH, { isStatic:true });
-Composite.add(world, ground);
-const groundG = new PIXI.Graphics();
-groundG.beginFill(0x22304a).drawRect(0, app.view.height-groundH, app.view.width, groundH).endFill();
-stage.addChild(groundG);
+  const el = {
+    scoreVal: document.getElementById('scoreVal'),
+    bestVal: document.getElementById('bestVal'),
+    roundLabel: document.getElementById('roundLabel'),
+    dartPips: [...document.querySelectorAll('.dart-pip')],
+    muteBtn: document.getElementById('muteBtn'),
+    streakBanner: document.getElementById('streakBanner'),
+    startPanel: document.getElementById('startPanel'),
+    overPanel: document.getElementById('overPanel'),
+    startBtn: document.getElementById('startBtn'),
+    retryBtn: document.getElementById('retryBtn'),
+    newBestTag: document.getElementById('newBestTag'),
+    finalScore: document.getElementById('finalScore'),
+    finalBestRound: document.getElementById('finalBestRound'),
+    finalBulls: document.getElementById('finalBulls'),
+    finalTreble: document.getElementById('finalTreble'),
+  };
 
-// --- Target ---
-const targetX = app.view.width - 200;
-const targetY = app.view.height - groundH - 100;
-const targetR = 40;
-const target = Bodies.circle(targetX, targetY, targetR, { isStatic:true });
-Composite.add(world, target);
-const targetG = new PIXI.Graphics();
-targetG.beginFill(0x22c55e).drawCircle(0,0,targetR).endFill();
-targetG.x = targetX; targetG.y = targetY; stage.addChild(targetG);
+  // ============================================================
+  // CONFIG
+  // ============================================================
 
-// --- Dart maker ---
-function makeDart(x,y){
-  const w=10,h=60;
-  const body = Bodies.rectangle(x,y,w,h,{ frictionAir:0.02, restitution:0.1, density:0.002 });
-  body.z = 0;      // forward depth
-  body.vz = 0;     // forward speed
-  Composite.add(world, body);
+  const DARTS_PER_ROUND = 3;
+  const TOTAL_ROUNDS = 10;
 
-  const g = new PIXI.Graphics();
-  g.beginFill(0xe5e7eb).drawRect(-w/2,-h/2,w,h).endFill();
-  g.beginFill(0xef4444).drawPolygon([0,-h/2-10,5,-h/2,-5,-h/2]);
-  const sprite = new PIXI.Sprite(app.renderer.generateTexture(g));
-  sprite.anchor.set(0.5);
-  dartsLayer.addChild(sprite);
+  const RING = {
+    innerBull: 0.055,
+    outerBull: 0.15,
+    tripleInner: 0.56,
+    tripleOuter: 0.63,
+    doubleInner: 0.94,
+    doubleOuter: 1.0,
+  };
 
-  return { body, sprite, stuck:false };
-}
+  const SECTOR_ORDER = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+  const SECTOR_ANGLE = 360 / SECTOR_ORDER.length;
 
-const darts = [];
+  const board = { cx: 0, cy: 0, r: 0 };
+  const throwOrigin = { x: 0, y: 0 };
 
-// --- Swipe ---
-let isAiming=false, start=null;
-const aimLine = new PIXI.Graphics();
-fxLayer.addChild(aimLine);
+  function layoutBoard(){
+    board.cx = W / 2;
+    board.cy = H * 0.40;
+    board.r = Math.min(W, H) * 0.28;
+    throwOrigin.x = W / 2;
+    throwOrigin.y = H + 40;
+  }
 
-app.view.addEventListener('pointerdown', e=>{ isAiming=true; start={x:e.clientX,y:e.clientY}; });
-app.view.addEventListener('pointermove', e=>{
-  if(!isAiming) return;
-  aimLine.clear();
-  aimLine.lineStyle(3,0xffd166,0.9);
-  aimLine.moveTo(start.x,start.y); aimLine.lineTo(e.clientX,e.clientY);
-});
-app.view.addEventListener('pointerup', e=>{
-  if(!isAiming) return;
-  shoot(start,{x:e.clientX,y:e.clientY});
-  isAiming=false; aimLine.clear();
-});
+  window.addEventListener('resize', resize);
+  resize();
 
-function shoot(start,end){
-  const dx=end.x-start.x, dy=end.y-start.y;
-  const dist=Math.sqrt(dx*dx+dy*dy); if(dist<10) return;
+  // ============================================================
+  // AUDIO
+  // ============================================================
 
-  const { body, sprite } = makeDart(start.x,start.y);
-  body.vz = Math.min(dist*0.15, 25); // forward speed
-  darts.push({ body,sprite,stuck:false });
+  let actx = null;
+  let muted = false;
 
-  const fx=dx*0.00025, fy=dy*0.00025;
-  Body.applyForce(body, body.position, {x:fx,y:fy});
-  Body.setAngularVelocity(body, dx*0.001);
-}
+  function audioCtx(){
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    return actx;
+  }
 
-// --- Collision: stick to target ---
-Events.on(engine,'collisionStart',event=>{
-  for(const pair of event.pairs){
-    const { bodyA, bodyB } = pair;
-    if((bodyA===target && isDart(bodyB)) || (bodyB===target && isDart(bodyA))){
-      const dartBody = bodyA===target?bodyB:bodyA;
-      const dart=darts.find(d=>d.body===dartBody);
-      if(dart && !dart.stuck){
-        dart.stuck=true;
-        Body.setStatic(dart.body,true);
-        dart.body.isSensor=true;
+  function tone(freq, dur, type='sine', gainVal=0.06, glideTo=null, delay=0){
+    if (muted) return;
+    try{
+      const ac = audioCtx();
+      const t0 = ac.currentTime + delay;
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t0);
+      if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, t0 + dur);
+      gain.gain.setValueAtTime(gainVal, t0);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      osc.connect(gain).connect(ac.destination);
+      osc.start(t0);
+      osc.stop(t0 + dur);
+    }catch(e){}
+  }
+
+  function noiseBurst(dur=0.18, gainVal=0.14, delay=0){
+    if (muted) return;
+    try{
+      const ac = audioCtx();
+      const bufferSize = ac.sampleRate * dur;
+      const buffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+      const src = ac.createBufferSource();
+      src.buffer = buffer;
+      const gain = ac.createGain();
+      const t0 = ac.currentTime + delay;
+      gain.gain.setValueAtTime(gainVal, t0);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      src.connect(gain).connect(ac.destination);
+      src.start(t0);
+    }catch(e){}
+  }
+
+  const sfx = {
+    whoosh: () => tone(700, 0.22, 'sine', 0.02, 200),
+    thwack: () => { noiseBurst(0.1, 0.16); tone(90, 0.14, 'triangle', 0.05, 40); },
+    bull: () => { tone(660,0.12,'square',0.045,900); tone(880,0.14,'square',0.04,1200,0.06); },
+    miss: () => tone(160, 0.2, 'sawtooth', 0.03, 60),
+    roundEnd: () => { tone(440,0.1,'square',0.03,0,0); tone(550,0.1,'square',0.03,0,0.1); tone(660,0.16,'square',0.035,0,0.2); },
+    click: () => tone(500, 0.05, 'square', 0.02),
+  };
+
+  // ============================================================
+  // GAME STATE
+  // ============================================================
+
+  let best = parseInt(localStorage.getItem('dartAlleyBest') || '0', 10);
+  el.bestVal.textContent = best;
+
+  const state = {
+    mode: 'ready', // ready | aiming | flying | playing | over
+    round: 1,
+    dartsThrownThisRound: 0,
+    score: 0,
+    bestRound: 0,
+    roundScoreAccum: 0,
+    bulls: 0,
+    trebles: 0,
+    streak: 0,
+    shake: 0,
+  };
+
+  let stuckDarts = [];   // darts embedded in the board this round
+  let flyingDart = null; // dart currently animating
+  let particles = [];
+  let popups = [];       // floating score text
+
+  function resetSession(){
+    state.round = 1;
+    state.dartsThrownThisRound = 0;
+    state.score = 0;
+    state.bestRound = 0;
+    state.roundScoreAccum = 0;
+    state.bulls = 0;
+    state.trebles = 0;
+    state.streak = 0;
+    stuckDarts = [];
+    flyingDart = null;
+    particles = [];
+    popups = [];
+    syncHud();
+  }
+
+  // ============================================================
+  // SCORING
+  // ============================================================
+
+  function scoreAt(px, py){
+    const dx = px - board.cx;
+    const dy = py - board.cy;
+    const r = Math.hypot(dx, dy) / board.r;
+
+    if (r > RING.doubleOuter) return { value: 0, label: 'MISS', ring: 'miss' };
+    if (r <= RING.innerBull) return { value: 50, label: 'BULLSEYE', ring: 'innerBull' };
+    if (r <= RING.outerBull) return { value: 25, label: 'BULL', ring: 'outerBull' };
+
+    let angle = Math.atan2(dx, -dy) * 180 / Math.PI;
+    if (angle < 0) angle += 360;
+    const idx = Math.floor(((angle + SECTOR_ANGLE/2) % 360) / SECTOR_ANGLE);
+    const v = SECTOR_ORDER[idx];
+
+    if (r <= RING.tripleInner) return { value: v, label: String(v), ring: 'single' };
+    if (r <= RING.tripleOuter) return { value: v*3, label: 'TREBLE ' + v, ring: 'triple' };
+    if (r <= RING.doubleInner) return { value: v, label: String(v), ring: 'single' };
+    return { value: v*2, label: 'DOUBLE ' + v, ring: 'double' };
+  }
+
+  // ============================================================
+  // AIM INPUT
+  // ============================================================
+
+  // Swipe-to-throw tuning. Angle of the swipe steers left/right,
+  // net swipe distance is power (too soft = low, too hard = high),
+  // and how wobbly the path was adds inaccuracy on top.
+  const SWIPE = {
+    idealDistance: 240,   // px swipe that lands dead on vertical center
+    powerToY: 0.42,       // px of board-Y per px of distance off-ideal
+    angleToX: 1.0,        // px of board-X per degree of swipe angle
+    maxAngleDeg: 32,
+    minDistance: 30,      // shorter than this counts as a weak flub
+  };
+
+  const aim = {
+    active: false,
+    startX: 0, startY: 0,
+    x: 0, y: 0,
+    samples: [],
+  };
+
+  function canAimNow(){
+    return state.mode === 'playing' && !flyingDart && state.dartsThrownThisRound < DARTS_PER_ROUND;
+  }
+
+  function pointerPos(e){
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function onDown(e){
+    if (!canAimNow()) return;
+    const p = pointerPos(e);
+    aim.active = true;
+    aim.startX = p.x; aim.startY = p.y;
+    aim.x = p.x; aim.y = p.y;
+    aim.samples = [{ t: performance.now(), x: p.x, y: p.y }];
+  }
+
+  function onMove(e){
+    if (!aim.active) return;
+    const p = pointerPos(e);
+    aim.x = p.x; aim.y = p.y;
+    aim.samples.push({ t: performance.now(), x: p.x, y: p.y });
+    if (aim.samples.length > 20) aim.samples.shift();
+  }
+
+  function onUp(e){
+    if (!aim.active) return;
+    aim.active = false;
+    const p = pointerPos(e);
+    aim.x = p.x; aim.y = p.y;
+    resolveSwipeThrow();
+  }
+
+  // path-length vs straight-line distance -> how wobbly the gesture was.
+  // 1 = perfectly straight, lower = shaky/curved swipe.
+  function straightnessOf(directDist){
+    if (aim.samples.length < 3 || directDist < 4) return 0.7;
+    let pathLen = 0;
+    for (let i=1;i<aim.samples.length;i++){
+      pathLen += Math.hypot(aim.samples[i].x-aim.samples[i-1].x, aim.samples[i].y-aim.samples[i-1].y);
+    }
+    return Math.max(0.15, Math.min(1, directDist / Math.max(pathLen, 1)));
+  }
+
+  canvas.addEventListener('pointerdown', onDown);
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onUp);
+
+  // ============================================================
+  // THROW / FLIGHT
+  // ============================================================
+
+  function resolveSwipeThrow(){
+    const dx = aim.x - aim.startX;
+    const dy = aim.y - aim.startY; // should be negative: swiping upward
+    const dist = Math.hypot(dx, dy);
+    const straightness = straightnessOf(dist);
+
+    // upward swipe angle, 0 = straight up, positive = swiped right
+    const upX = dx, upY = -dy; // flip so "up" is positive
+    let angleDeg = Math.atan2(upX, Math.max(upY, 1)) * 180 / Math.PI;
+    angleDeg = Math.max(-SWIPE.maxAngleDeg, Math.min(SWIPE.maxAngleDeg, angleDeg));
+
+    const effDist = Math.max(dist, SWIPE.minDistance * 0.5);
+    const powerOffset = (SWIPE.idealDistance - effDist) * SWIPE.powerToY;
+
+    const targetX = board.cx + angleDeg * (board.r / 90) * SWIPE.angleToX * 2.6;
+    const targetY = board.cy + powerOffset * (board.r / 240);
+
+    const roundBonus = Math.floor(state.round / 3); // difficulty creeps up slightly
+    const flubPenalty = dist < SWIPE.minDistance ? 2.4 : 1;
+    const baseSpread = (14 + roundBonus * 1.4) * flubPenalty;
+    const spread = Math.max(2.5, baseSpread * (1 - straightness * 0.75));
+
+    const a = Math.random() * Math.PI * 2;
+    const mag = Math.random() * spread;
+    const finalX = targetX + Math.cos(a) * mag;
+    const finalY = targetY + Math.sin(a) * mag;
+
+    throwDart(finalX, finalY);
+  }
+
+  function throwDart(finalX, finalY){
+    sfx.whoosh();
+    flyingDart = {
+      fromX: throwOrigin.x, fromY: throwOrigin.y,
+      toX: finalX, toY: finalY,
+      t: 0,
+      dur: 460,
+    };
+  }
+
+  function landDart(){
+    const d = flyingDart;
+    flyingDart = null;
+    const result = scoreAt(d.toX, d.toY);
+
+    stuckDarts.push({ x: d.toX, y: d.toY, angle: (Math.random()-0.5)*0.5, wobble: 1 });
+
+    state.dartsThrownThisRound++;
+    state.roundScoreAccum += result.value;
+
+    if (result.value === 0){
+      state.streak = 0;
+      sfx.miss();
+      shake(3);
+    } else {
+      if (result.ring === 'innerBull') state.bulls++;
+      if (result.ring === 'triple') state.trebles++;
+
+      if (result.value >= 20){
+        state.streak++;
+      } else {
+        state.streak = 0;
       }
+
+      const streakMult = 1 + Math.min(state.streak, 5) * 0.1;
+      const pts = Math.round(result.value * streakMult);
+      state.score += pts;
+
+      if (result.ring === 'innerBull'){ sfx.bull(); shake(14); }
+      else { sfx.thwack(); shake(4 + result.value/12); }
+
+      spawnParticles(d.toX, d.toY, result.ring);
+      popups.push({
+        x: d.toX, y: d.toY - 10,
+        text: (streakMult > 1 ? '+' + pts : '+' + result.value) + '  ' + result.label,
+        life: 900, maxLife: 900, vy: -0.55,
+      });
+
+      if (state.streak >= 2) showStreakBanner(state.streak);
+    }
+
+    syncHud();
+
+    if (state.dartsThrownThisRound >= DARTS_PER_ROUND){
+      setTimeout(endRound, 650);
     }
   }
-});
-function isDart(body){ return darts.some(d=>d.body===body); }
 
-// --- Update loop ---
-app.ticker.add(()=>{
-  for(const dart of darts){
-    if(!dart.stuck){
-      dart.body.z += dart.body.vz*0.1;
-      const scale = Math.max(0.2,1-dart.body.z/1000);
-      dart.sprite.scale.set(scale);
-      dart.sprite.y = dart.body.position.y - dart.body.z*0.3;
-    }
-    dart.sprite.x=dart.body.position.x;
-    dart.sprite.rotation=dart.body.angle;
+  function endRound(){
+    state.bestRound = Math.max(state.bestRound, state.roundScoreAccum);
+    state.roundScoreAccum = 0;
+    sfx.roundEnd();
+
+    // pull darts out with a little flight-back animation, then advance
+    stuckDarts.forEach((d, i) => {
+      setTimeout(() => {
+        spawnParticles(d.x, d.y, 'pull');
+      }, i*60);
+    });
+
+    setTimeout(() => {
+      stuckDarts = [];
+      state.dartsThrownThisRound = 0;
+
+      if (state.round >= TOTAL_ROUNDS){
+        finishSession();
+      } else {
+        state.round++;
+        syncHud();
+      }
+    }, 420);
   }
 
-  for(let i=darts.length-1;i>=0;i--){
-    const d=darts[i],p=d.body.position;
-    if(!d.stuck&&(p.y>app.view.height+200||p.x<-200||p.x>app.view.width+200)){
-      Composite.remove(world,d.body); dartsLayer.removeChild(d.sprite); darts.splice(i,1);
+  function finishSession(){
+    state.mode = 'over';
+    const isNewBest = state.score > best;
+    if (isNewBest){
+      best = state.score;
+      localStorage.setItem('dartAlleyBest', String(best));
+      el.bestVal.textContent = best;
+    }
+    el.newBestTag.hidden = !isNewBest;
+    el.finalScore.textContent = state.score;
+    el.finalBestRound.textContent = state.bestRound;
+    el.finalBulls.textContent = state.bulls;
+    el.finalTreble.textContent = state.trebles;
+    showPanel('overPanel');
+  }
+
+  // ============================================================
+  // FX
+  // ============================================================
+
+  function shake(amount){ state.shake = Math.min(state.shake + amount, 22); }
+
+  const RING_COLORS = {
+    innerBull: '#ff5a52', outerBull: '#7bc47f',
+    triple: '#e8a13d', double: '#e8a13d',
+    single: '#f3ead9', pull: '#a89a86',
+  };
+
+  function spawnParticles(x, y, ring){
+    const color = RING_COLORS[ring] || '#f3ead9';
+    const count = ring === 'innerBull' ? 26 : 14;
+    for (let i=0;i<count;i++){
+      const a = Math.random()*Math.PI*2;
+      const s = 1 + Math.random()*3.5;
+      particles.push({
+        x, y,
+        vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+        life: 350 + Math.random()*350, maxLife: 700,
+        color, size: 1.5 + Math.random()*2.2,
+      });
     }
   }
-});
 
-// --- Reset ---
-document.getElementById('reset').onclick=()=>{
-  darts.forEach(d=>Composite.remove(world,d.body));
-  dartsLayer.removeChildren(); darts.length=0;
-};
+  let streakTimer = null;
+  function showStreakBanner(n){
+    el.streakBanner.textContent = `Hot streak ×${(1+Math.min(n,5)*0.1).toFixed(1)}`;
+    el.streakBanner.classList.add('show');
+    clearTimeout(streakTimer);
+    streakTimer = setTimeout(() => el.streakBanner.classList.remove('show'), 1100);
+  }
 
-// --- Resize ---
-window.addEventListener('resize',()=>{
-  Body.setPosition(ground,{x:app.view.width/2,y:app.view.height-groundH/2});
-  groundG.clear().beginFill(0x22304a).drawRect(0,app.view.height-groundH,app.view.width,groundH).endFill();
-  targetG.x=app.view.width-200; targetG.y=app.view.height-groundH-100;
-  Body.setPosition(target,{x:targetG.x,y:targetG.y});
-});
+  // ============================================================
+  // UPDATE
+  // ============================================================
 
-app.renderer.view.style.touchAction='none';
+  function updateFlying(dt){
+    if (!flyingDart) return;
+    flyingDart.t += dt;
+    if (flyingDart.t >= flyingDart.dur){
+      landDart();
+    }
+  }
+
+  function updateParticles(dt){
+    for (let i=particles.length-1;i>=0;i--){
+      const p = particles[i];
+      p.x += p.vx * (dt/16.67);
+      p.y += p.vy * (dt/16.67);
+      p.vx *= 0.94; p.vy *= 0.94;
+      p.life -= dt;
+      if (p.life <= 0) particles.splice(i,1);
+    }
+  }
+
+  function updatePopups(dt){
+    for (let i=popups.length-1;i>=0;i--){
+      const p = popups[i];
+      p.y += p.vy * (dt/16.67);
+      p.life -= dt;
+      if (p.life <= 0) popups.splice(i,1);
+    }
+  }
+
+  function update(dt){
+    updateFlying(dt);
+    updateParticles(dt);
+    updatePopups(dt);
+    state.shake *= 0.88;
+  }
+
+  // ============================================================
+  // DRAW — background
+  // ============================================================
+
+  function drawBackground(){
+    ctx.fillStyle = '#120d0a';
+    ctx.fillRect(0,0,W,H);
+
+    // floor perspective lines suggesting a dart alley corner
+    ctx.save();
+    ctx.strokeStyle = 'rgba(232,161,61,0.05)';
+    ctx.lineWidth = 1;
+    const floorY = H * 0.72;
+    for (let i=-6;i<=6;i++){
+      ctx.beginPath();
+      ctx.moveTo(W/2 + i*70, H);
+      ctx.lineTo(W/2 + i*10, floorY);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(0, floorY); ctx.lineTo(W, floorY);
+    ctx.stroke();
+    ctx.restore();
+
+    // spotlight cone on the board
+    const g = ctx.createRadialGradient(board.cx, board.cy, board.r*0.2, board.cx, board.cy, board.r*2.4);
+    g.addColorStop(0, 'rgba(232,161,61,0.16)');
+    g.addColorStop(1, 'rgba(18,13,10,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  // ============================================================
+  // DRAW — board
+  // ============================================================
+
+  function drawBoard(){
+    const { cx, cy, r } = board;
+
+    // cabinet ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, r*1.06, 0, Math.PI*2);
+    ctx.fillStyle = '#08110d';
+    ctx.shadowBlur = 40;
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.clip();
+
+    for (let i=0;i<SECTOR_ORDER.length;i++){
+      const startA = (-90 + i*SECTOR_ANGLE - SECTOR_ANGLE/2) * Math.PI/180;
+      const endA = startA + SECTOR_ANGLE * Math.PI/180;
+      const singleColor = i % 2 === 0 ? '#1c1712' : '#eadfc9';
+      const bandColor = i % 2 === 0 ? '#c9403a' : '#3f7a4a';
+
+      drawBand(cx, cy, r*RING.outerBull, r*RING.tripleInner, startA, endA, singleColor);
+      drawBand(cx, cy, r*RING.tripleInner, r*RING.tripleOuter, startA, endA, bandColor);
+      drawBand(cx, cy, r*RING.tripleOuter, r*RING.doubleInner, startA, endA, singleColor);
+      drawBand(cx, cy, r*RING.doubleInner, r*RING.doubleOuter, startA, endA, bandColor);
+    }
+
+    // bulls
+    ctx.beginPath();
+    ctx.arc(cx, cy, r*RING.outerBull, 0, Math.PI*2);
+    ctx.fillStyle = '#3f7a4a';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r*RING.innerBull, 0, Math.PI*2);
+    ctx.fillStyle = '#c9403a';
+    ctx.fill();
+
+    // sector wires
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
+    for (let i=0;i<SECTOR_ORDER.length;i++){
+      const a = (-90 + i*SECTOR_ANGLE - SECTOR_ANGLE/2) * Math.PI/180;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a)*r*RING.outerBull, cy + Math.sin(a)*r*RING.outerBull);
+      ctx.lineTo(cx + Math.cos(a)*r, cy + Math.sin(a)*r);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // outer wire rim
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // numbers
+    ctx.font = '600 ' + Math.max(13, r*0.11) + 'px Oswald, sans-serif';
+    ctx.fillStyle = '#f3ead9';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i=0;i<SECTOR_ORDER.length;i++){
+      const a = (-90 + i*SECTOR_ANGLE) * Math.PI/180;
+      const nx = cx + Math.cos(a) * r * 1.16;
+      const ny = cy + Math.sin(a) * r * 1.16;
+      ctx.fillText(String(SECTOR_ORDER[i]), nx, ny);
+    }
+  }
+
+  function drawBand(cx, cy, rInner, rOuter, startA, endA, color){
+    ctx.beginPath();
+    ctx.arc(cx, cy, rOuter, startA, endA);
+    ctx.arc(cx, cy, rInner, endA, startA, true);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  // ============================================================
+  // DRAW — darts
+  // ============================================================
+
+  function drawStuckDart(d){
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.rotate(d.angle);
+    // shadow
+    ctx.beginPath();
+    ctx.ellipse(2, 3, 6, 2.4, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fill();
+    // shaft
+    ctx.fillStyle = '#d6d0c4';
+    ctx.fillRect(-2, -26, 4, 26);
+    // flight (fletching)
+    ctx.fillStyle = '#e8a13d';
+    ctx.beginPath();
+    ctx.moveTo(0, -26);
+    ctx.lineTo(-7, -34);
+    ctx.lineTo(0, -30);
+    ctx.lineTo(7, -34);
+    ctx.closePath();
+    ctx.fill();
+    // tip
+    ctx.beginPath();
+    ctx.moveTo(0, 2);
+    ctx.lineTo(-2.5, -2);
+    ctx.lineTo(2.5, -2);
+    ctx.closePath();
+    ctx.fillStyle = '#c7c2b6';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+
+  function drawFlyingDart(){
+    if (!flyingDart) return;
+    const d = flyingDart;
+    const t = Math.min(d.t / d.dur, 1);
+    const et = easeOutCubic(t);
+
+    const x = d.fromX + (d.toX - d.fromX) * et;
+    const arc = Math.sin(t * Math.PI) * -90; // upward arc
+    const y = d.fromY + (d.toY - d.fromY) * et + arc;
+
+    const scale = 1.5 - et * 1.2; // big & close -> small & far
+
+    // trail
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - (d.toX-d.fromX)*0.02, y - (d.toY-d.fromY)*0.02 + 6);
+    ctx.strokeStyle = 'rgba(232,161,61,0.35)';
+    ctx.lineWidth = 3 * scale;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(x, y);
+    const flightAngle = Math.atan2(d.toY - d.fromY, d.toX - d.fromX) + Math.PI/2;
+    ctx.rotate(flightAngle * (1-et) * 0.15);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#d6d0c4';
+    ctx.fillRect(-2, -26, 4, 26);
+    ctx.fillStyle = '#e8a13d';
+    ctx.beginPath();
+    ctx.moveTo(0, -26); ctx.lineTo(-7,-34); ctx.lineTo(0,-30); ctx.lineTo(7,-34);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, 2); ctx.lineTo(-2.5,-2); ctx.lineTo(2.5,-2);
+    ctx.closePath(); ctx.fillStyle = '#c7c2b6'; ctx.fill();
+    ctx.restore();
+  }
+
+  function drawReadyDart(){
+    if (flyingDart || state.dartsThrownThisRound >= DARTS_PER_ROUND || state.mode !== 'playing') return;
+    const bob = Math.sin(performance.now() * 0.003) * 4;
+    ctx.save();
+    ctx.translate(throwOrigin.x, throwOrigin.y - 60 + bob);
+    ctx.scale(1.6, 1.6);
+    ctx.fillStyle = '#d6d0c4';
+    ctx.fillRect(-2, -26, 4, 26);
+    ctx.fillStyle = '#e8a13d';
+    ctx.beginPath();
+    ctx.moveTo(0, -26); ctx.lineTo(-7,-34); ctx.lineTo(0,-30); ctx.lineTo(7,-34);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, 2); ctx.lineTo(-2.5,-2); ctx.lineTo(2.5,-2);
+    ctx.closePath(); ctx.fillStyle = '#c7c2b6'; ctx.fill();
+    ctx.restore();
+  }
+
+  function drawAimReticle(){
+    if (!aim.active) return;
+    // Neutral gesture trail only — deliberately doesn't reveal where this
+    // will land on the board. Feel it out, like a real throw.
+    ctx.save();
+    ctx.strokeStyle = 'rgba(243,234,217,0.55)';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(aim.startX, aim.startY);
+    ctx.lineTo(aim.x, aim.y);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(aim.startX, aim.startY, 5, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(243,234,217,0.35)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(aim.x, aim.y, 7, 0, Math.PI*2);
+    ctx.fillStyle = '#e8a13d';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawParticles(){
+    for (const p of particles){
+      const a = p.life / p.maxLife;
+      ctx.globalAlpha = a;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawPopups(){
+    ctx.textAlign = 'center';
+    ctx.font = '600 15px Oswald, sans-serif';
+    for (const p of popups){
+      const a = Math.max(p.life / p.maxLife, 0);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#f3ead9';
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function draw(){
+    ctx.save();
+    if (state.shake > 0.3){
+      ctx.translate((Math.random()-0.5)*state.shake, (Math.random()-0.5)*state.shake);
+    }
+
+    drawBackground();
+    drawBoard();
+    for (const d of stuckDarts) drawStuckDart(d);
+    drawFlyingDart();
+    drawReadyDart();
+    drawAimReticle();
+    drawParticles();
+    drawPopups();
+
+    ctx.restore();
+  }
+
+  // ============================================================
+  // HUD
+  // ============================================================
+
+  function syncHud(){
+    el.scoreVal.textContent = state.score;
+    el.roundLabel.textContent = `Round ${state.round} / ${TOTAL_ROUNDS}`;
+    el.dartPips.forEach((pip, i) => pip.classList.toggle('used', i < state.dartsThrownThisRound));
+  }
+
+  // ============================================================
+  // FLOW
+  // ============================================================
+
+  function showPanel(name){
+    ['startPanel','overPanel'].forEach(id => {
+      document.getElementById(id).hidden = (id !== name);
+    });
+  }
+
+  function startGame(){
+    resetSession();
+    state.mode = 'playing';
+    showPanel(null);
+    document.querySelectorAll('.panel').forEach(p => p.hidden = true);
+  }
+
+  el.startBtn.addEventListener('click', () => { audioCtx(); startGame(); sfx.click(); });
+  el.retryBtn.addEventListener('click', () => { startGame(); sfx.click(); });
+  el.muteBtn.addEventListener('click', () => {
+    muted = !muted;
+    el.muteBtn.textContent = muted ? '🔇' : '🔊';
+  });
+
+  // ============================================================
+  // MAIN LOOP
+  // ============================================================
+
+  let lastTime = performance.now();
+  function loop(now){
+    let dt = now - lastTime;
+    lastTime = now;
+    dt = Math.min(dt, 34);
+
+    update(dt);
+    draw();
+
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+})();
 </script>
 </body>
 </html>

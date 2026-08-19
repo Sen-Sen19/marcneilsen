@@ -4,78 +4,240 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tic Tac Toe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
-body {
-  font-family: Arial, sans-serif;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: 50px;
-}
+  :root{
+    --bg1: #1b1035;
+    --bg2: #2c1250;
+    --x-a: #5ad1ff;
+    --x-b: #4361ee;
+    --o-a: #ff7ab8;
+    --o-b: #ff4e8a;
+    --card: rgba(255,255,255,0.06);
+    --card-border: rgba(255,255,255,0.14);
+    --text: #f1eefc;
+    --text-dim: #b8b0d8;
+    --win: #ffd166;
+  }
 
-h1 {
-  margin-bottom: 20px;
-}
+  * { box-sizing: border-box; }
 
-#scoreboard {
-  margin-bottom: 20px;
-  font-size: 18px;
-}
+  html, body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: 'Poppins', Arial, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(circle at 20% 15%, rgba(90,209,255,0.14), transparent 45%),
+      radial-gradient(circle at 85% 80%, rgba(255,122,184,0.14), transparent 45%),
+      linear-gradient(160deg, var(--bg1), var(--bg2));
+    background-attachment: fixed;
+  }
 
-#game {
-  display: grid;
-  grid-template-columns: repeat(3, 100px);
-  grid-template-rows: repeat(3, 100px);
-  gap: 5px;
-}
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 20px 40px;
+  }
 
-.cell {
-  width: 100px;
-  height: 100px;
-  background: #f2f2f2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 48px;
-  cursor: pointer;
-}
+  h1 {
+    margin: 0 0 6px;
+    font-weight: 800;
+    font-size: 32px;
+    letter-spacing: 0.5px;
+    background: linear-gradient(90deg, var(--x-a), var(--o-a));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
 
-.cell:hover {
-  background: #ddd;
-}
+  .tagline {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-bottom: 26px;
+    letter-spacing: 0.3px;
+  }
 
-#message {
-  margin-top: 20px;
-  font-size: 20px;
-}
+  #scoreboard {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
 
-button {
-  margin-top: 20px;
-  padding: 10px 20px;
-  font-size: 16px;
-  cursor: pointer;
-}
+  .score-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 84px;
+    padding: 10px 16px;
+    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(6px);
+    transition: transform .15s ease, border-color .15s ease;
+  }
+  .score-pill:hover{ transform: translateY(-2px); }
+  .score-pill .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+  }
+  .score-pill .value {
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .score-pill.player { border-color: rgba(90,209,255,0.4); }
+  .score-pill.player .value { color: var(--x-a); }
+  .score-pill.bot { border-color: rgba(255,122,184,0.4); }
+  .score-pill.bot .value { color: var(--o-a); }
+  .score-pill.draw .value { color: var(--win); }
+
+  #boardWrap {
+    padding: 18px;
+    border-radius: 24px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    backdrop-filter: blur(10px);
+  }
+
+  #game {
+    display: grid;
+    grid-template-columns: repeat(3, 92px);
+    grid-template-rows: repeat(3, 92px);
+    gap: 8px;
+  }
+
+  .cell {
+    position: relative;
+    width: 92px;
+    height: 92px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 44px;
+    font-weight: 800;
+    cursor: pointer;
+    user-select: none;
+    transition: background .15s ease, border-color .15s ease, transform .1s ease;
+  }
+
+  .cell:hover:not(.x):not(.o) {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.22);
+  }
+  .cell:active:not(.x):not(.o) { transform: scale(0.96); }
+
+  .cell.x, .cell.o { cursor: default; }
+
+  .cell.x {
+    color: transparent;
+    background: linear-gradient(145deg, var(--x-a), var(--x-b));
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+  .cell.o {
+    color: transparent;
+    background: linear-gradient(145deg, var(--o-a), var(--o-b));
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+
+  @keyframes popIn {
+    0%   { transform: scale(0.2) rotate(-15deg); opacity: 0; }
+    60%  { transform: scale(1.15) rotate(4deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+  .cell.x span, .cell.o span {
+    display: inline-block;
+    animation: popIn 0.32s cubic-bezier(.34,1.56,.64,1);
+  }
+
+  .cell.win {
+    background: rgba(255,209,102,0.16);
+    border-color: rgba(255,209,102,0.6);
+    animation: winPulse 1s ease-in-out infinite;
+  }
+  @keyframes winPulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(255,209,102,0); }
+    50%      { box-shadow: 0 0 18px rgba(255,209,102,0.55); }
+  }
+
+  #message {
+    margin-top: 22px;
+    min-height: 26px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  #message.show { opacity: 1; transform: translateY(0); }
+  #message.win-msg { color: var(--x-a); }
+  #message.lose-msg { color: var(--o-a); }
+  #message.draw-msg { color: var(--win); }
+
+  button#restart {
+    margin-top: 22px;
+    padding: 11px 26px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: #1b1035;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    background: linear-gradient(90deg, var(--x-a), var(--o-a));
+    box-shadow: 0 8px 20px rgba(90,120,255,0.25);
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  button#restart:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 26px rgba(90,120,255,0.35);
+  }
+  button#restart:active { transform: translateY(0); }
 </style>
 </head>
 <body>
 <h1>Tic Tac Toe</h1>
+<div class="tagline">You are X · unbeatable bot plays O</div>
 
 <div id="scoreboard">
-  Player: <span id="playerScore">0</span> |
-  Bot: <span id="botScore">0</span> |
-  Draws: <span id="drawScore">0</span>
+  <div class="score-pill player">
+    <span class="label">You</span>
+    <span class="value" id="playerScore">0</span>
+  </div>
+  <div class="score-pill bot">
+    <span class="label">Bot</span>
+    <span class="value" id="botScore">0</span>
+  </div>
+  <div class="score-pill draw">
+    <span class="label">Draws</span>
+    <span class="value" id="drawScore">0</span>
+  </div>
 </div>
 
-<div id="game">
-  <div class="cell" data-index="0"></div>
-  <div class="cell" data-index="1"></div>
-  <div class="cell" data-index="2"></div>
-  <div class="cell" data-index="3"></div>
-  <div class="cell" data-index="4"></div>
-  <div class="cell" data-index="5"></div>
-  <div class="cell" data-index="6"></div>
-  <div class="cell" data-index="7"></div>
-  <div class="cell" data-index="8"></div>
+<div id="boardWrap">
+  <div id="game">
+    <div class="cell" data-index="0"></div>
+    <div class="cell" data-index="1"></div>
+    <div class="cell" data-index="2"></div>
+    <div class="cell" data-index="3"></div>
+    <div class="cell" data-index="4"></div>
+    <div class="cell" data-index="5"></div>
+    <div class="cell" data-index="6"></div>
+    <div class="cell" data-index="7"></div>
+    <div class="cell" data-index="8"></div>
+  </div>
 </div>
 
 <div id="message"></div>
@@ -91,12 +253,17 @@ const player = 'X';
 const bot = 'O';
 let gameOver = false;
 
+const WIN_COMBOS = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
 // Load scores from localStorage or initialize
 let playerScore = parseInt(localStorage.getItem('playerScore')) || 0;
 let botScore = parseInt(localStorage.getItem('botScore')) || 0;
 let drawScore = parseInt(localStorage.getItem('drawScore')) || 0;
 
-// Display scores
 const playerScoreEl = document.getElementById('playerScore');
 const botScoreEl = document.getElementById('botScore');
 const drawScoreEl = document.getElementById('drawScore');
@@ -105,60 +272,77 @@ updateScoreboard();
 cells.forEach(cell => cell.addEventListener('click', playerMove));
 restartBtn.addEventListener('click', restartGame);
 
+function setMark(cell, mark) {
+  cell.classList.add(mark === player ? 'x' : 'o');
+  const span = document.createElement('span');
+  span.textContent = mark;
+  cell.appendChild(span);
+}
+
 function playerMove(e) {
-  const index = e.target.dataset.index;
+  const cell = e.currentTarget;
+  const index = cell.dataset.index;
   if (board[index] === '' && !gameOver) {
     board[index] = player;
-    e.target.textContent = player;
+    setMark(cell, player);
+
     if (checkWinner(board, player)) {
-      message.textContent = "You Win!";
-      playerScore++;
-      saveScores();
-      updateScoreboard();
-      gameOver = true;
+      endGame('win', getWinningCombo(board, player));
       return;
     }
     if (boardFull()) {
-      message.textContent = "Draw!";
-      drawScore++;
-      saveScores();
-      updateScoreboard();
-      gameOver = true;
+      endGame('draw');
       return;
     }
-    botMove();
+    setTimeout(botMove, 350); // brief pause so the bot doesn't feel instant/robotic
   }
 }
 
 function botMove() {
   const bestMoveIndex = minimax(board, bot).index;
   board[bestMoveIndex] = bot;
-  cells[bestMoveIndex].textContent = bot;
+  setMark(cells[bestMoveIndex], bot);
 
   if (checkWinner(board, bot)) {
-    message.textContent = "Bot Wins!";
-    botScore++;
-    saveScores();
-    updateScoreboard();
-    gameOver = true;
+    endGame('lose', getWinningCombo(board, bot));
     return;
   }
   if (boardFull()) {
-    message.textContent = "Draw!";
-    drawScore++;
-    saveScores();
-    updateScoreboard();
-    gameOver = true;
+    endGame('draw');
   }
 }
 
-function checkWinner(b, player) {
-  const winCombos = [
-    [0,1,2],[3,4,5],[6,7,8],
-    [0,3,6],[1,4,7],[2,5,8],
-    [0,4,8],[2,4,6]
-  ];
-  return winCombos.some(combo => combo.every(i => b[i] === player));
+function endGame(result, winCombo) {
+  gameOver = true;
+  if (winCombo) {
+    winCombo.forEach(i => cells[i].classList.add('win'));
+  }
+
+  message.classList.remove('win-msg', 'lose-msg', 'draw-msg');
+  if (result === 'win') {
+    message.textContent = 'You Win!';
+    message.classList.add('win-msg');
+    playerScore++;
+  } else if (result === 'lose') {
+    message.textContent = 'Bot Wins!';
+    message.classList.add('lose-msg');
+    botScore++;
+  } else {
+    message.textContent = "Draw!";
+    message.classList.add('draw-msg');
+    drawScore++;
+  }
+  message.classList.add('show');
+  saveScores();
+  updateScoreboard();
+}
+
+function checkWinner(b, ply) {
+  return WIN_COMBOS.some(combo => combo.every(i => b[i] === ply));
+}
+
+function getWinningCombo(b, ply) {
+  return WIN_COMBOS.find(combo => combo.every(i => b[i] === ply)) || null;
 }
 
 function boardFull() {
@@ -167,8 +351,12 @@ function boardFull() {
 
 function restartGame() {
   board = ['', '', '', '', '', '', '', '', ''];
-  cells.forEach(cell => cell.textContent = '');
+  cells.forEach(cell => {
+    cell.textContent = '';
+    cell.className = 'cell';
+  });
   message.textContent = '';
+  message.classList.remove('show', 'win-msg', 'lose-msg', 'draw-msg');
   gameOver = false;
 }
 

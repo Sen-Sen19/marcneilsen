@@ -1,226 +1,777 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sliding Puzzle</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #f5f5f5;
-            margin: 0;
-            padding: 0;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slide & Frame — Sliding Puzzle</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
 
-        #puzzle-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 40px;
-            width: 80%;
-            max-width: 800px;
-        }
+:root{
+  --wood-dark:#231610;
+  --wood-mid:#3a2718;
+  --wood-warm:#5c3c25;
+  --wood-grain:#2c1c12;
+  --brass:#c9a227;
+  --brass-bright:#eccf72;
+  --paper:#f4ead8;
+  --jade:#5fae9d;
+  --jade-bright:#7fd1bf;
+  --ink:#231a11;
+  --text:#f4ead8;
+  --text-dim:#b9a688;
+  --font-display:'Fraunces', serif;
+  --font-body:'Inter', system-ui, sans-serif;
+}
 
-        #puzzle {
-            display: grid;
-            grid-template-columns: repeat(4, 100px);
-            grid-template-rows: repeat(4, 100px);
-            gap: 2px;
-            margin-bottom: 20px;
-            border: 2px solid #333;
-            background-color: #fff;
-        }
+*{ box-sizing:border-box; }
 
-        .puzzle-piece {
-            width: 100px;
-            height: 100px;
-            background-size: 400px 400px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            background-repeat: no-repeat;
-            border: 1px solid #ddd;
-            transition: transform 0.3s ease;
-        }
+body{
+  margin:0;
+  min-height:100vh;
+  font-family:var(--font-body);
+  color:var(--text);
+  background:
+    radial-gradient(circle at 15% 0%, #452d1c 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, #2c1c10 0%, transparent 55%),
+    var(--wood-dark);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:32px 16px 60px;
+}
 
-        .puzzle-piece:hover {
-            transform: scale(1.05);
-        }
+/* ---------- HERO ---------- */
+.hero{ text-align:center; margin-bottom:22px; }
+.hero .eyebrow{
+  font-size:11px; letter-spacing:4px; text-transform:uppercase; color:var(--jade-bright);
+  margin:0 0 6px;
+}
+.hero h1{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-optical-sizing:auto;
+  font-size:40px;
+  margin:0;
+  letter-spacing:.5px;
+}
+.hero p{ margin:6px 0 0; color:var(--text-dim); font-size:13px; }
 
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #20c997;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-        }
+/* ---------- STATUS BAR ---------- */
+.status-bar{
+  display:flex; gap:24px; flex-wrap:wrap; justify-content:center; align-items:center;
+  background:rgba(0,0,0,.22);
+  border:1px solid rgba(201,162,39,.25);
+  border-radius:10px;
+  padding:10px 24px;
+  margin-bottom:22px;
+  font-family:var(--font-display);
+}
+.status-item{ display:flex; flex-direction:column; align-items:center; min-width:66px; }
+.status-item .label{ font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); font-family:var(--font-body); }
+.status-item .value{ font-size:20px; font-weight:700; color:var(--brass-bright); }
 
-        button:hover {
-            background-color: #17a689;
-        }
+/* ---------- LAYOUT ---------- */
+.puzzle-container{
+  display:flex;
+  gap:36px;
+  align-items:flex-start;
+  flex-wrap:wrap;
+  justify-content:center;
+}
 
-        #reference-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
-            width: 200px;
-            text-align: center;
-        }
+/* ---------- FRAME ---------- */
+.frame{
+  position:relative;
+  padding:14px;
+  border-radius:10px;
+  background:
+    repeating-linear-gradient(115deg, var(--wood-warm) 0 3px, var(--wood-mid) 3px 7px);
+  box-shadow:0 24px 50px -18px rgba(0,0,0,.7), inset 0 0 0 1px rgba(0,0,0,.35);
+}
+.frame::before, .frame::after,
+.frame .corner-tl, .frame .corner-tr, .frame .corner-bl, .frame .corner-br{
+  content:''; position:absolute; width:22px; height:22px;
+  border:2px solid var(--brass);
+  opacity:.9;
+}
+.corner-tl{ top:6px; left:6px; border-right:none; border-bottom:none; }
+.corner-tr{ top:6px; right:6px; border-left:none; border-bottom:none; }
+.corner-bl{ bottom:6px; left:6px; border-right:none; border-top:none; }
+.corner-br{ bottom:6px; right:6px; border-left:none; border-top:none; }
 
-        #reference-image {
-            width: 200px;
-            height: 200px;
-            background-size: cover;
-            border: 2px solid #333;
-        }
+#puzzle{
+  position:relative;
+  background:var(--ink);
+  border-radius:4px;
+  overflow:hidden;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);
+}
 
-        select {
-            padding: 5px;
-            font-size: 14px;
-            width: 100%;
-            max-width: 150px;
-            margin-top: 10px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-        }
+.puzzle-piece{
+  position:absolute;
+  top:0; left:0;
+  background-repeat:no-repeat;
+  cursor:pointer;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.35);
+  transition:transform .18s cubic-bezier(.4,0,.2,1), box-shadow .15s ease;
+}
+.puzzle-piece:hover{ box-shadow:inset 0 0 0 2px var(--jade-bright), 0 2px 8px rgba(0,0,0,.4); filter:brightness(1.06); z-index:3; }
+.puzzle-piece.no-anim{ transition:none; }
+.puzzle-piece.solved-flash{ animation:flashSolved .5s ease; }
+@keyframes flashSolved{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.35) saturate(1.2); } }
 
-        label {
-            font-size: 14px;
-            margin-top: 10px;
-            color: #333;
-        }
-    </style>
+/* ---------- SIDE PANEL ---------- */
+.side-panel{
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  width:190px;
+}
+#reference-frame{
+  padding:8px;
+  background:repeating-linear-gradient(115deg, var(--wood-warm) 0 3px, var(--wood-mid) 3px 7px);
+  border-radius:8px;
+  box-shadow:0 12px 26px -12px rgba(0,0,0,.6);
+}
+#reference-image{
+  width:170px; height:170px;
+  background-size:cover;
+  background-position:center;
+  border-radius:3px;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);
+}
+
+.control-group{ width:100%; display:flex; flex-direction:column; gap:6px; }
+.control-group label{
+  font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim);
+}
+select{
+  width:100%; padding:9px 10px; font-size:13px; font-family:var(--font-body);
+  border-radius:6px; border:1px solid rgba(201,162,39,.35);
+  background:var(--wood-mid); color:var(--text); cursor:pointer;
+}
+select:focus{ outline:2px solid var(--jade-bright); outline-offset:1px; }
+
+button{
+  width:100%;
+  font-family:var(--font-display); font-weight:600; letter-spacing:1px;
+  font-size:14px;
+  padding:11px 14px;
+  border-radius:7px;
+  border:1px solid rgba(201,162,39,.4);
+  background:linear-gradient(180deg, var(--jade), #3d7a6d);
+  color:#0e1c19;
+  cursor:pointer;
+  transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
+}
+button:hover{ filter:brightness(1.08); box-shadow:0 0 16px rgba(95,174,157,.35); transform:translateY(-1px); }
+button:active{ transform:translateY(0); }
+button.secondary{
+  background:linear-gradient(180deg, #4a3220, #2f2013);
+  color:var(--text);
+}
+
+.hint{ color:var(--text-dim); font-size:11px; line-height:1.6; text-align:center; margin-top:2px; }
+
+/* ---------- TOAST ---------- */
+#toastContainer{
+  position:fixed; top:18px; left:50%; transform:translateX(-50%);
+  display:flex; flex-direction:column; gap:8px; z-index:200; align-items:center;
+}
+.toast{
+  font-family:var(--font-display); font-weight:600; letter-spacing:.5px; font-size:13px;
+  padding:10px 18px; border-radius:8px; color:var(--text);
+  background:rgba(20,14,8,.95); border:1px solid var(--jade-bright);
+  box-shadow:0 8px 24px rgba(0,0,0,.5);
+  animation:toastIn .25s ease, toastOut .3s ease 2.2s forwards;
+}
+@keyframes toastIn{ from{ opacity:0; transform:translateY(-10px);} to{ opacity:1; transform:translateY(0);} }
+@keyframes toastOut{ to{ opacity:0; transform:translateY(-10px);} }
+
+/* ---------- MODAL ---------- */
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(10,6,3,.82); backdrop-filter:blur(3px);
+  display:flex; align-items:center; justify-content:center; z-index:300;
+  transition:opacity .2s ease;
+}
+.modal-overlay.hidden{ opacity:0; pointer-events:none; }
+.modal{
+  background:var(--wood-mid); border:1px solid rgba(201,162,39,.4); border-radius:16px;
+  padding:36px 42px; text-align:center; max-width:340px;
+  box-shadow:0 30px 60px rgba(0,0,0,.6);
+}
+.modal h2{
+  font-family:var(--font-display); font-size:28px; margin:0 0 8px; color:var(--brass-bright);
+  text-shadow:0 0 20px rgba(201,162,39,.35);
+}
+.modal p{ color:var(--text-dim); font-size:13px; margin:0 0 22px; line-height:1.6; }
+
+@media (max-width:640px){
+  .hero h1{ font-size:28px; }
+}
+</style>
 </head>
 <body>
-    <div id="puzzle-container">
-        <div id="puzzle">
-            <!-- Puzzle pieces will be added dynamically here -->
-        </div>
-        <div id="reference-container">
-            <div id="reference-image"></div>
-            <button id="shuffle-btn">Shuffle</button>
-            <label for="image-selector">Choose Image</label>
-            <select id="image-selector">
-                <option value="landscape1.jpg">Landscape 1</option>
-                <option value="landscape2.jpg">Landscape 2</option>
-                <option value="landscape3.jpg">Landscape 3</option>
-                <option value="landscape4.jpg">Landscape 4</option>
-                <option value="landscape5.jpg">Landscape 5</option>
-            </select>
-        </div>
+
+<div id="toastContainer"></div>
+
+<div class="hero">
+  <p class="eyebrow">Slide · Frame · Solve</p>
+  <h1>Slide &amp; Frame</h1>
+  <p>Rearrange the tiles to restore the picture</p>
+</div>
+
+<div class="status-bar">
+  <div class="status-item">
+    <span class="label">Moves</span>
+    <span class="value" id="statMoves">0</span>
+  </div>
+  <div class="status-item">
+    <span class="label">Time</span>
+    <span class="value" id="statTime">00:00</span>
+  </div>
+  <div class="status-item">
+    <span class="label">Best</span>
+    <span class="value" id="statBest">—</span>
+  </div>
+</div>
+
+<div class="puzzle-container">
+  <div class="frame">
+    <span class="corner-tl"></span><span class="corner-tr"></span>
+    <span class="corner-bl"></span><span class="corner-br"></span>
+    <div id="puzzle"></div>
+  </div>
+
+  <div class="side-panel">
+    <div id="reference-frame">
+      <div id="reference-image"></div>
     </div>
 
-    <script>
-        const puzzleContainer = document.getElementById('puzzle');
-        const shuffleButton = document.getElementById('shuffle-btn');
-        const referenceImage = document.getElementById('reference-image');
-        const imageSelector = document.getElementById('image-selector');
-        let imageUrl = 'landscape1.jpg'; // Default image
-        const gridSize = 4; // 4x4 grid (16 pieces)
+    <button id="shuffle-btn">Shuffle</button>
 
-        // Create the initial puzzle pieces
-        let puzzlePieces = [];
-        let emptySlot = { row: 3, col: 3 };
+    <div class="control-group">
+      <label for="image-selector">Scene</label>
+      <select id="image-selector"></select>
+    </div>
 
-        // Initialize puzzle pieces
-        function initPuzzle() {
-            puzzlePieces = [];
-            for (let row = 0; row < gridSize; row++) {
-                for (let col = 0; col < gridSize; col++) {
-                    if (row === gridSize - 1 && col === gridSize - 1) {
-                        puzzlePieces.push(null); // Empty space
-                    } else {
-                        const piece = {
-                            row,
-                            col,
-                            index: row * gridSize + col,
-                            position: { row, col },
-                        };
-                        puzzlePieces.push(piece);
-                    }
-                }
-            }
-            renderPuzzle();
-        }
+    <div class="control-group">
+      <label for="size-selector">Grid Size</label>
+      <select id="size-selector">
+        <option value="3">3 × 3 — Easy</option>
+        <option value="4" selected>4 × 4 — Classic</option>
+        <option value="5">5 × 5 — Hard</option>
+      </select>
+    </div>
 
-        // Render the puzzle pieces on the grid
-        function renderPuzzle() {
-            puzzleContainer.innerHTML = '';
-            puzzlePieces.forEach((piece, index) => {
-                const div = document.createElement('div');
-                div.classList.add('puzzle-piece');
-                if (piece) {
-                    div.style.backgroundImage = `url(${imageUrl})`;
-                    div.style.backgroundPosition = `-${piece.col * 100}px -${piece.row * 100}px`;
-                    div.setAttribute('data-index', index);
-                    div.addEventListener('click', () => movePiece(piece));
-                }
-                puzzleContainer.appendChild(div);
-            });
-        }
+    <p class="hint">Click a tile in line with the gap to slide it, or use arrow keys.</p>
+  </div>
+</div>
 
-        // Handle the move of a piece
-        function movePiece(piece) {
-            const pieceIndex = puzzlePieces.indexOf(piece);
-            const emptyIndex = puzzlePieces.indexOf(null);
+<div class="modal-overlay hidden" id="winModal">
+  <div class="modal">
+    <h2>Solved!</h2>
+    <p id="winText">You restored the picture.</p>
+    <button id="playAgainBtn">Shuffle Again</button>
+  </div>
+</div>
 
-            const pieceRow = Math.floor(pieceIndex / gridSize);
-            const pieceCol = pieceIndex % gridSize;
+<script>
+/* ================= THEME ARTWORK (generated on canvas, no external files) ================= */
+const IMG_PX = 420;
 
-            const emptyRow = Math.floor(emptyIndex / gridSize);
-            const emptyCol = emptyIndex % gridSize;
+const THEMES = [
+  { id:'sunset',  label:'Sunset Ridge', draw:drawSunset },
+  { id:'ocean',   label:'Deep Ocean',   draw:drawOcean },
+  { id:'forest',  label:'Pine Forest',  draw:drawForest },
+  { id:'aurora',  label:'Aurora Night', draw:drawAurora },
+  { id:'desert',  label:'Desert Dune',  draw:drawDesert },
+];
 
-            if (
-                (Math.abs(pieceRow - emptyRow) === 1 && pieceCol === emptyCol) ||
-                (Math.abs(pieceCol - emptyCol) === 1 && pieceRow === emptyRow)
-            ) {
-                puzzlePieces[emptyIndex] = piece;
-                puzzlePieces[pieceIndex] = null;
-                renderPuzzle();
-            }
-        }
+function skyGrad(ctx,size,c1,c2){
+  const g = ctx.createLinearGradient(0,0,0,size);
+  g.addColorStop(0,c1); g.addColorStop(1,c2);
+  ctx.fillStyle=g; ctx.fillRect(0,0,size,size);
+}
 
-        // Shuffle the puzzle
-        function shufflePuzzle() {
-            for (let i = 0; i < 1000; i++) {
-                const randomIndex = Math.floor(Math.random() * puzzlePieces.length);
-                const randomPiece = puzzlePieces[randomIndex];
-                if (randomPiece) {
-                    movePiece(randomPiece);
-                }
-            }
-        }
+function ridge(ctx,size,baseY,amp,color,seed,segments=14){
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.moveTo(0,size);
+  ctx.lineTo(0,baseY);
+  for(let i=0;i<=segments;i++){
+    const x = (size/segments)*i;
+    const y = baseY - Math.sin(i*0.9+seed)*amp - Math.sin(i*2.3+seed*1.7)*amp*0.35;
+    ctx.lineTo(x,y);
+  }
+  ctx.lineTo(size,size);
+  ctx.closePath();
+  ctx.fill();
+}
 
-        // Initialize and shuffle on page load
-        initPuzzle();
+function glowCircle(ctx,x,y,r,colorCore,colorEdge){
+  const g = ctx.createRadialGradient(x,y,0,x,y,r);
+  g.addColorStop(0,colorCore);
+  g.addColorStop(1,colorEdge);
+  ctx.fillStyle=g;
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+}
 
-        shuffleButton.addEventListener('click', () => {
-            shufflePuzzle();
-        });
+function stars(ctx,size,count,seedStart){
+  let s = seedStart;
+  const rand = ()=>{ s = (s*9301+49297)%233280; return s/233280; };
+  for(let i=0;i<count;i++){
+    const x = rand()*size, y = rand()*size*0.65, r = rand()*1.3+0.3;
+    ctx.globalAlpha = rand()*0.6+0.4;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
 
-        // Change the image when the user selects a different one
-        imageSelector.addEventListener('change', (e) => {
-            imageUrl = e.target.value;
-            referenceImage.style.backgroundImage = `url(${imageUrl})`;
-            initPuzzle();
-        });
+function clouds(ctx,size,count,color,seedStart,yMin,yMax){
+  let s = seedStart;
+  const rand = ()=>{ s = (s*9301+49297)%233280; return s/233280; };
+  for(let i=0;i<count;i++){
+    const x = rand()*size;
+    const y = yMin + rand()*(yMax-yMin);
+    const w = size*(0.10+rand()*0.14);
+    const h = w*0.34;
+    ctx.globalAlpha = 0.22 + rand()*0.28;
+    ctx.fillStyle = color;
+    for(let k=0;k<4;k++){
+      const ox = (rand()-0.5)*w*0.7;
+      const oy = (rand()-0.5)*h*0.5;
+      const r = h*(0.4+rand()*0.4);
+      ctx.beginPath(); ctx.ellipse(x+ox,y+oy,r*1.4,r,0,0,Math.PI*2); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
 
-        // Check if the puzzle is solved
-        function checkWin() {
-            return puzzlePieces.every((piece, index) => {
-                if (!piece) return true;
-                return piece.index === index;
-            });
-        }
-    </script>
+function nebulaBlobs(ctx,size,count,seedStart){
+  let s = seedStart;
+  const rand = ()=>{ s = (s*9301+49297)%233280; return s/233280; };
+  const palette = ['rgba(180,110,220,.16)','rgba(110,180,220,.14)','rgba(220,140,110,.12)','rgba(120,220,170,.13)'];
+  for(let i=0;i<count;i++){
+    const x = rand()*size, y = rand()*size*0.6, r = size*(0.08+rand()*0.14);
+    const g = ctx.createRadialGradient(x,y,0,x,y,r);
+    g.addColorStop(0, palette[Math.floor(rand()*palette.length)]);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+}
+
+function addTexture(ctx,size){
+  // fine grain so no two tiles of a flat region read as identical
+  const grainCount = Math.floor(size*size*0.045);
+  for(let i=0;i<grainCount;i++){
+    const x = Math.random()*size, y = Math.random()*size;
+    ctx.fillStyle = Math.random()<0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    ctx.fillRect(x,y,1,1);
+  }
+  // gentle vignette gives large flat areas a positional gradient cue
+  const vg = ctx.createRadialGradient(size*0.5,size*0.45,size*0.15,size*0.5,size*0.5,size*0.78);
+  vg.addColorStop(0,'rgba(0,0,0,0)');
+  vg.addColorStop(1,'rgba(0,0,0,.22)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0,0,size,size);
+}
+
+function drawSunset(ctx,size){
+  skyGrad(ctx,size,'#3a1c4e','#f4874b');
+  glowCircle(ctx,size*0.5,size*0.52,size*0.34,'rgba(255,224,168,.9)','rgba(255,138,76,0)');
+  glowCircle(ctx,size*0.5,size*0.52,size*0.13,'#fff3d6','#ffbf6b');
+  clouds(ctx,size,5,'#ffd9b0',5,size*0.06,size*0.42);
+  ridge(ctx,size,size*0.62,size*0.05,'#7a3a5a',1,10);
+  ridge(ctx,size,size*0.72,size*0.06,'#552a45',2.4,12);
+  ridge(ctx,size,size*0.85,size*0.045,'#2c1830',4.1,14);
+  for(let i=0;i<6;i++){
+    ctx.strokeStyle='rgba(40,20,30,.55)';
+    ctx.lineWidth=2;
+    const bx=size*0.15+i*size*0.13, by=size*0.22+((i%2)*10);
+    ctx.beginPath();
+    ctx.moveTo(bx-8,by); ctx.quadraticCurveTo(bx-3,by-6,bx,by);
+    ctx.quadraticCurveTo(bx+3,by-6,bx+8,by);
+    ctx.stroke();
+  }
+}
+
+function drawOcean(ctx,size){
+  skyGrad(ctx,size,'#bfe6f2','#4fa3c7');
+  clouds(ctx,size,6,'#ffffff',11,size*0.04,size*0.4);
+  const seaGrad = ctx.createLinearGradient(0,size*0.55,0,size);
+  seaGrad.addColorStop(0,'#1c7fa0'); seaGrad.addColorStop(1,'#0b3c54');
+  ctx.fillStyle=seaGrad; ctx.fillRect(0,size*0.55,size,size*0.45);
+  glowCircle(ctx,size*0.78,size*0.28,size*0.09,'#fff8e0','rgba(255,240,190,0)');
+  ctx.strokeStyle='rgba(255,255,255,.55)';
+  for(let i=0;i<7;i++){
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    const y = size*0.62 + i*size*0.045;
+    ctx.moveTo(0,y);
+    for(let x=0;x<=size;x+=size/12){
+      ctx.lineTo(x, y+Math.sin(x*0.05+i)*3);
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle='#1a1a1a';
+  ctx.beginPath();
+  ctx.moveTo(size*0.15,size*0.5); ctx.lineTo(size*0.22,size*0.5); ctx.lineTo(size*0.20,size*0.4); ctx.closePath();
+  ctx.fill();
+  ctx.fillRect(size*0.10,size*0.5,size*0.16,size*0.02);
+}
+
+function drawForest(ctx,size){
+  skyGrad(ctx,size,'#d8ecdf','#8fbfa0');
+  clouds(ctx,size,5,'#ffffff',29,size*0.03,size*0.35);
+  ridge(ctx,size,size*0.5,size*0.04,'#a9c9b6',1,10);
+  function trees(baseY,scale,color,count,seed){
+    let s=seed;
+    const rand=()=>{ s=(s*9301+49297)%233280; return s/233280; };
+    for(let i=0;i<count;i++){
+      const x = rand()*size;
+      const h = (0.16+rand()*0.10)*size*scale;
+      const w = h*0.5;
+      ctx.fillStyle=color;
+      ctx.beginPath();
+      ctx.moveTo(x,baseY);
+      ctx.lineTo(x-w/2,baseY);
+      ctx.lineTo(x,baseY-h);
+      ctx.lineTo(x+w/2,baseY);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  trees(size*0.68,0.85,'#5f8a6c',10,7);
+  trees(size*0.82,1.15,'#33553f',9,23);
+  trees(size*0.97,1.4,'#1e3a29',8,41);
+}
+
+function drawAurora(ctx,size){
+  skyGrad(ctx,size,'#050914','#0f2436');
+  stars(ctx,size,70,17);
+  const bands = [
+    {c:'rgba(95,225,180,.45)', amp:size*0.06, offY:size*0.28, seed:0.4},
+    {c:'rgba(140,110,230,.35)', amp:size*0.05, offY:size*0.36, seed:1.6},
+    {c:'rgba(95,200,225,.3)',  amp:size*0.045, offY:size*0.22, seed:2.8},
+  ];
+  bands.forEach(b=>{
+    ctx.beginPath();
+    ctx.moveTo(0,b.offY);
+    for(let x=0;x<=size;x+=size/20){
+      ctx.lineTo(x, b.offY + Math.sin(x*0.02+b.seed)*b.amp);
+    }
+    for(let x=size;x>=0;x-=size/20){
+      ctx.lineTo(x, b.offY + 60 + Math.sin(x*0.018+b.seed+1)*b.amp);
+    }
+    ctx.closePath();
+    ctx.fillStyle = b.c;
+    ctx.fill();
+  });
+  ridge(ctx,size,size*0.82,size*0.04,'#0a1520',3,12);
+  ridge(ctx,size,size*0.93,size*0.03,'#050a10',5.2,14);
+}
+
+function drawDesert(ctx,size){
+  skyGrad(ctx,size,'#ffe0a8','#f2a35c');
+  glowCircle(ctx,size*0.72,size*0.24,size*0.1,'#fff6dd','rgba(255,220,150,0)');
+  ridge(ctx,size,size*0.66,size*0.035,'#e8b06a',0.6,16);
+  ridge(ctx,size,size*0.78,size*0.045,'#d99a4e',2.1,16);
+  ridge(ctx,size,size*0.92,size*0.05,'#b97a38',4.4,16);
+  function cactus(x,baseY,h){
+    ctx.fillStyle='#3d6b4a';
+    ctx.fillRect(x-4,baseY-h,8,h);
+    ctx.fillRect(x-14,baseY-h*0.55,10,7);
+    ctx.fillRect(x-14,baseY-h*0.78,7,h*0.35);
+    ctx.fillRect(x+4,baseY-h*0.65,10,7);
+    ctx.fillRect(x+7,baseY-h*0.85,7,h*0.3);
+  }
+  cactus(size*0.22, size*0.92, size*0.16);
+  cactus(size*0.66, size*0.97, size*0.12);
+}
+
+function generateThemeImage(theme){
+  const canvas = document.createElement('canvas');
+  canvas.width = IMG_PX; canvas.height = IMG_PX;
+  const ctx = canvas.getContext('2d');
+  theme.draw(ctx, IMG_PX);
+  return canvas.toDataURL('image/png');
+}
+
+/* ================= PUZZLE STATE ================= */
+const puzzleEl = document.getElementById('puzzle');
+const referenceImage = document.getElementById('reference-image');
+const imageSelector = document.getElementById('image-selector');
+const sizeSelector = document.getElementById('size-selector');
+const shuffleBtn = document.getElementById('shuffle-btn');
+const winModal = document.getElementById('winModal');
+const winText = document.getElementById('winText');
+
+THEMES.forEach((t,i)=>{
+  const opt = document.createElement('option');
+  opt.value = t.id;
+  opt.textContent = t.label;
+  if(i===0) opt.selected = true;
+  imageSelector.appendChild(opt);
+});
+
+let gridSize = 4;
+let boardPx = 400;
+let piecePx = boardPx / gridSize;
+let imageUrl = generateThemeImage(THEMES[0]);
+
+let board = [];        // board[row][col] = pieceId or null
+let emptyR = 0, emptyC = 0;
+let tileEls = {};      // pieceId -> DOM element
+let moveCount = 0;
+let timerSeconds = 0;
+let timerHandle = null;
+let timerRunning = false;
+let bestMoves = null;
+let solved = true;
+
+function setBoardPx(){
+  boardPx = Math.min(400, gridSize*100);
+  piecePx = boardPx / gridSize;
+  puzzleEl.style.width = boardPx+'px';
+  puzzleEl.style.height = boardPx+'px';
+}
+
+function homeRowCol(id){ return { r: Math.floor(id/gridSize), c: id % gridSize }; }
+
+function buildTiles(){
+  puzzleEl.innerHTML = '';
+  tileEls = {};
+  const total = gridSize*gridSize;
+  for(let id=0; id<total-1; id++){
+    const {r,c} = homeRowCol(id);
+    const div = document.createElement('div');
+    div.className = 'puzzle-piece';
+    div.style.width = piecePx+'px';
+    div.style.height = piecePx+'px';
+    div.style.backgroundImage = `url(${imageUrl})`;
+    div.style.backgroundSize = boardPx+'px '+boardPx+'px';
+    div.style.backgroundPosition = `-${c*piecePx}px -${r*piecePx}px`;
+    div.dataset.id = id;
+    div.addEventListener('click', ()=> onTileClick(id));
+    puzzleEl.appendChild(div);
+    tileEls[id] = div;
+  }
+}
+
+function solvedBoard(){
+  const b = [];
+  let id = 0;
+  for(let r=0;r<gridSize;r++){
+    b.push([]);
+    for(let c=0;c<gridSize;c++){
+      if(r===gridSize-1 && c===gridSize-1){ b[r].push(null); }
+      else { b[r].push(id); id++; }
+    }
+  }
+  return b;
+}
+
+function positionTile(id, r, c, animate=true){
+  const el = tileEls[id];
+  if(!el) return;
+  if(!animate) el.classList.add('no-anim');
+  el.style.transform = `translate(${c*piecePx}px, ${r*piecePx}px)`;
+  if(!animate){
+    void el.offsetWidth;
+    el.classList.remove('no-anim');
+  }
+}
+
+function renderAll(animate=false){
+  for(let r=0;r<gridSize;r++){
+    for(let c=0;c<gridSize;c++){
+      const id = board[r][c];
+      if(id!==null) positionTile(id,r,c,animate);
+    }
+  }
+}
+
+function findEmpty(){
+  for(let r=0;r<gridSize;r++)
+    for(let c=0;c<gridSize;c++)
+      if(board[r][c]===null){ emptyR=r; emptyC=c; return; }
+}
+
+/* ---------------- MOVES ---------------- */
+function onTileClick(id){
+  if(!tileEls[id]) return;
+  let row=-1, col=-1;
+  for(let r=0;r<gridSize;r++)
+    for(let c=0;c<gridSize;c++)
+      if(board[r][c]===id){ row=r; col=c; }
+  attemptMove(row,col);
+}
+
+function attemptMove(row,col){
+  if(solved) return;
+  if(row===emptyR && col===emptyC) return;
+
+  if(row===emptyR){
+    const step = col>emptyC ? 1 : -1;
+    for(let c=emptyC; c!==col; c+=step){
+      board[row][c] = board[row][c+step];
+      positionTile(board[row][c], row, c, true);
+    }
+    board[row][col] = null;
+    emptyR=row; emptyC=col;
+  } else if(col===emptyC){
+    const step = row>emptyR ? 1 : -1;
+    for(let r=emptyR; r!==row; r+=step){
+      board[r][col] = board[r+step][col];
+      positionTile(board[r][col], r, col, true);
+    }
+    board[row][col] = null;
+    emptyR=row; emptyC=col;
+  } else {
+    return; // not in line with the gap
+  }
+
+  moveCount++;
+  updateStats();
+  if(!timerRunning) startTimer();
+  checkWin();
+}
+
+/* ---------------- KEYBOARD ---------------- */
+document.addEventListener('keydown', e=>{
+  if(solved) return;
+  const keyMap = {
+    ArrowUp:    [emptyR-1, emptyC],
+    ArrowDown:  [emptyR+1, emptyC],
+    ArrowLeft:  [emptyR, emptyC-1],
+    ArrowRight: [emptyR, emptyC+1],
+  };
+  if(keyMap[e.key]){
+    e.preventDefault();
+    const [r,c] = keyMap[e.key];
+    if(r>=0 && r<gridSize && c>=0 && c<gridSize){
+      attemptMove(r,c);
+    }
+  }
+});
+
+/* ---------------- SHUFFLE ---------------- */
+function shufflePuzzle(){
+  board = solvedBoard();
+  findEmpty();
+  let lastR=-1, lastC=-1;
+  const steps = gridSize*gridSize*30;
+  for(let i=0;i<steps;i++){
+    const neighbors = [
+      [emptyR-1,emptyC],[emptyR+1,emptyC],[emptyR,emptyC-1],[emptyR,emptyC+1]
+    ].filter(([r,c])=> r>=0 && r<gridSize && c>=0 && c<gridSize && !(r===lastR && c===lastC));
+    const [nr,nc] = neighbors[Math.floor(Math.random()*neighbors.length)];
+    board[emptyR][emptyC] = board[nr][nc];
+    board[nr][nc] = null;
+    lastR = emptyR; lastC = emptyC;
+    emptyR = nr; emptyC = nc;
+  }
+  renderAll(false);
+  moveCount = 0;
+  resetTimer();
+  solved = false;
+  updateStats();
+  showToast('Puzzle shuffled — good luck!');
+}
+
+/* ---------------- WIN ---------------- */
+function checkWin(){
+  const target = solvedBoard();
+  for(let r=0;r<gridSize;r++)
+    for(let c=0;c<gridSize;c++)
+      if(board[r][c] !== target[r][c]) return false;
+
+  solved = true;
+  stopTimer();
+  Object.values(tileEls).forEach(el=> el.classList.add('solved-flash'));
+  if(bestMoves===null || moveCount < bestMoves){
+    bestMoves = moveCount;
+    document.getElementById('statBest').textContent = bestMoves;
+  }
+  winText.textContent = `Solved in ${moveCount} moves and ${formatTime(timerSeconds)}.`;
+  winModal.classList.remove('hidden');
+  return true;
+}
+
+/* ---------------- STATS / TIMER ---------------- */
+function updateStats(){
+  document.getElementById('statMoves').textContent = moveCount;
+}
+function formatTime(s){
+  const m = Math.floor(s/60).toString().padStart(2,'0');
+  const sec = (s%60).toString().padStart(2,'0');
+  return `${m}:${sec}`;
+}
+function startTimer(){
+  timerRunning = true;
+  timerHandle = setInterval(()=>{
+    timerSeconds++;
+    document.getElementById('statTime').textContent = formatTime(timerSeconds);
+  },1000);
+}
+function stopTimer(){
+  timerRunning = false;
+  clearInterval(timerHandle);
+}
+function resetTimer(){
+  stopTimer();
+  timerSeconds = 0;
+  document.getElementById('statTime').textContent = '00:00';
+}
+
+/* ---------------- TOAST ---------------- */
+function showToast(msg){
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.getElementById('toastContainer').appendChild(t);
+  setTimeout(()=>t.remove(), 2600);
+}
+
+/* ---------------- NEW GAME / CONTROLS ---------------- */
+function newGame(){
+  setBoardPx();
+  buildTiles();
+  board = solvedBoard();
+  findEmpty();
+  renderAll(false);
+  solved = true;
+  moveCount = 0;
+  bestMoves = null;
+  document.getElementById('statBest').textContent = '—';
+  resetTimer();
+  updateStats();
+  shufflePuzzle();
+}
+
+shuffleBtn.addEventListener('click', shufflePuzzle);
+
+imageSelector.addEventListener('change', e=>{
+  const theme = THEMES.find(t=>t.id===e.target.value);
+  imageUrl = generateThemeImage(theme);
+  referenceImage.style.backgroundImage = `url(${imageUrl})`;
+  newGame();
+});
+
+sizeSelector.addEventListener('change', e=>{
+  gridSize = parseInt(e.target.value);
+  newGame();
+});
+
+document.getElementById('playAgainBtn').addEventListener('click', ()=>{
+  winModal.classList.add('hidden');
+  shufflePuzzle();
+});
+
+/* ---------------- INIT ---------------- */
+referenceImage.style.backgroundImage = `url(${imageUrl})`;
+newGame();
+</script>
 </body>
 </html>
