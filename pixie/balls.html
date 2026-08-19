@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PIXI + Matter.js Demo</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #101820;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <!-- Load PIXI.js and Matter.js -->
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.x/dist/pixi.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+
+  <script>
+    // --- Aliases ---
+    const { Engine, World, Bodies, Runner } = Matter;
+
+    // --- PIXI setup ---
+    const app = new PIXI.Application({ 
+      width: window.innerWidth, 
+      height: window.innerHeight, 
+      backgroundAlpha: 0 
+    });
+    document.body.appendChild(app.view);
+
+    // --- Matter.js setup ---
+    const engine = Engine.create();
+    const world = engine.world;
+
+    // --- Create bounding walls ---
+    const ground = Bodies.rectangle(window.innerWidth / 2, window.innerHeight + 25, window.innerWidth, 50, { isStatic: true });
+    const ceiling = Bodies.rectangle(window.innerWidth / 2, -25, window.innerWidth, 50, { isStatic: true });
+    const leftWall = Bodies.rectangle(-25, window.innerHeight / 2, 50, window.innerHeight, { isStatic: true });
+    const rightWall = Bodies.rectangle(window.innerWidth + 25, window.innerHeight / 2, 50, window.innerHeight, { isStatic: true });
+    World.add(world, [ground, ceiling, leftWall, rightWall]);
+
+    // --- Store PIXI sprites linked to Matter bodies ---
+    const balls = [];
+
+    function addBall(x, y) {
+      const radius = 20 + Math.random() * 20;
+      const color = Math.random() * 0xffffff;
+      const body = Bodies.circle(x, y, radius, { restitution: 0.9 });
+      const gfx = new PIXI.Graphics();
+      gfx.beginFill(color);
+      gfx.drawCircle(0, 0, radius);
+      gfx.endFill();
+      app.stage.addChild(gfx);
+      balls.push({ body, gfx });
+      World.add(world, body);
+    }
+
+    // --- Spawn a few initial balls ---
+    for (let i = 0; i < 5; i++) {
+      addBall(Math.random() * window.innerWidth, 100 + i * 60);
+    }
+
+    // --- Click to spawn more balls ---
+    window.addEventListener('pointerdown', e => {
+      addBall(e.clientX, e.clientY);
+    });
+
+    // --- Physics loop ---
+    const runner = Runner.create();
+    Runner.run(runner, engine);
+
+    // --- Render loop ---
+    app.ticker.add(() => {
+      balls.forEach(({ body, gfx }) => {
+        gfx.x = body.position.x;
+        gfx.y = body.position.y;
+        gfx.rotation = body.angle;
+      });
+    });
+
+    // --- Handle window resize ---
+    window.addEventListener('resize', () => {
+      app.renderer.resize(window.innerWidth, window.innerHeight);
+      World.clear(world, false);
+      World.add(world, [ground, ceiling, leftWall, rightWall]);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UNKILLABLE SNAKE</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    background:#000;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    min-height:100vh;font-family:'Share Tech Mono',monospace;overflow:hidden;
+    padding:8px;
+  }
+  body::before{
+    content:'';position:fixed;inset:0;pointer-events:none;z-index:100;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,100,.01) 2px,rgba(0,255,100,.01) 4px);
+  }
+  body::after{
+    content:'';position:fixed;inset:0;pointer-events:none;z-index:99;
+    background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.8) 100%);
+  }
+  h1{
+    font-family:'Orbitron',sans-serif;font-weight:900;
+    font-size:clamp(11px,4vw,20px);letter-spacing:.15em;margin-bottom:6px;
+    text-align:center;padding:0 8px;
+    background:linear-gradient(90deg,#f0f,#0ff,#0f0,#ff0,#f0f);
+    background-size:300%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    animation:rainbow-shift 4s linear infinite;
+  }
+  #stats{
+    display:flex;gap:8px;margin-bottom:6px;
+    font-size:clamp(8px,2.5vw,11px);color:#ffffff44;letter-spacing:.06em;
+    flex-wrap:wrap;justify-content:center;
+  }
+  #stats b{color:#fff;font-weight:normal;}
+  #fill-bar-wrap{
+    width:min(480px,95vw);height:3px;
+    background:#ffffff11;margin-bottom:8px;border:1px solid #ffffff22;
+  }
+  #fill-bar{
+    height:100%;
+    background:linear-gradient(90deg,#f0f,#0ff,#0f0,#ff0,#f0f);
+    background-size:300%;animation:rainbow-shift 3s linear infinite;
+    box-shadow:0 0 8px #0ff;width:0%;transition:width .08s;
+  }
+  #canvas-wrapper{
+    position:relative;border:1px solid #ffffff11;
+    box-shadow:0 0 40px #0ff1,0 0 100px #f0f1,inset 0 0 30px #00000044;
+    transform-origin:top center;
+  }
+  canvas{display:block;}
+  #status{
+    margin-top:6px;font-size:clamp(7px,2vw,10px);letter-spacing:.08em;text-align:center;min-height:14px;
+    padding:0 8px;
+    background:linear-gradient(90deg,#f0f,#0ff,#0f0,#ff0,#f0f);
+    background-size:300%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    animation:rainbow-shift 3s linear infinite,pulse 2s ease-in-out infinite;
+  }
+  #seed-display{margin-top:4px;font-size:clamp(7px,1.8vw,9px);color:#ffffff22;letter-spacing:.05em;text-align:center;padding:0 8px;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.45;}}
+  @keyframes rainbow-shift{0%{background-position:0%}100%{background-position:300%}}
+  #overlay{
+    position:absolute;inset:0;background:#020408f4;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:#00ff64;font-family:'Share Tech Mono',monospace;
+    font-size:clamp(9px,2.5vw,12px);letter-spacing:.1em;z-index:10;padding:16px;
+  }
+  .big{font-family:'Orbitron',sans-serif;font-size:clamp(12px,3.5vw,16px);font-weight:700;margin-bottom:10px;text-align:center;}
+  #progress-text{color:#00ff6488;font-size:clamp(8px,2vw,10px);margin-top:6px;text-align:center;}
+  #gen-bar-wrap{width:min(280px,80%);height:3px;background:#00ff6411;margin-top:10px;border:1px solid #00ff6422;}
+  #gen-bar{height:100%;background:#00ff64;box-shadow:0 0 6px #00ff64;width:0%;}
+</style>
+</head>
+<body>
+<h1>⬡ UNKILLABLE SNAKE ⬡</h1>
+<div id="stats">
+  LENGTH:<b id="len">0</b> &nbsp;|&nbsp;
+  MAX:<b id="maxlen">0</b> &nbsp;|&nbsp;
+  LOOPS:<b id="loops">0</b> &nbsp;|&nbsp;
+  STEP:<b id="cyclepos">0</b>
+</div>
+<div id="fill-bar-wrap"><div id="fill-bar"></div></div>
+<div id="canvas-wrapper">
+  <canvas id="c"></canvas>
+  <div id="overlay">
+    <div class="big">GENERATING RANDOM CYCLE</div>
+    <div>Building unique Hamiltonian path...</div>
+    <div id="gen-bar-wrap"><div id="gen-bar"></div></div>
+    <div id="progress-text">Starting...</div>
+  </div>
+</div>
+<div id="status">INITIALIZING...</div>
+<div id="seed-display"></div>
+<script>
+
+const COLS=20,ROWS=20,CELL=24;
+const W=COLS*CELL,H=ROWS*CELL,TOTAL=COLS*ROWS;
+const canvas=document.getElementById('c');
+canvas.width=W;canvas.height=H;
+const ctx=canvas.getContext('2d');
+
+// Scale canvas wrapper to fit screen
+function fitCanvas(){
+  const maxW=window.innerWidth-16;
+  const maxH=window.innerHeight-120; // leave room for UI above/below
+  const scale=Math.min(1, maxW/W, maxH/H);
+  canvas.parentElement.style.transform=`scale(${scale})`;
+  canvas.parentElement.style.marginBottom=`${(H*scale - H)}px`;
+}
+fitCanvas();
+window.addEventListener('resize',fitCanvas);
+
+// Seeded RNG
+const seed=Math.floor(Math.random()*0xFFFFFF);
+document.getElementById('seed-display').textContent=
+  `SEED: #${seed.toString(16).toUpperCase().padStart(6,'0')} — RELOAD FOR NEW PATTERN`;
+let _s=seed;
+function rand(){
+  _s|=0;_s=_s+0x6D2B79F5|0;
+  let t=Math.imul(_s^_s>>>15,1|_s);
+  t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;
+}
+function rInt(n){return Math.floor(rand()*n);}
+
+const idx=(x,y)=>y*COLS+x;
+const valid=(x,y)=>x>=0&&x<COLS&&y>=0&&y<ROWS;
+const DIRS=[{dx:0,dy:-1},{dx:1,dy:0},{dx:0,dy:1},{dx:-1,dy:0}];
+function nbrs(x,y){return DIRS.map(d=>({x:x+d.dx,y:y+d.dy})).filter(n=>valid(n.x,n.y));}
+
+// Hamiltonian cycle (Warnsdorff)
+function tryBuild(cb){
+  const vis=new Uint8Array(TOTAL),path=[];
+  const sx=rInt(COLS),sy=rInt(ROWS);
+  let cx=sx,cy=sy;
+  vis[idx(cx,cy)]=1;path.push({x:cx,y:cy});
+  for(let step=1;step<TOTAL;step++){
+    const cands=nbrs(cx,cy).filter(n=>!vis[idx(n.x,n.y)])
+      .map(n=>({n,score:nbrs(n.x,n.y).filter(m=>!vis[idx(m.x,m.y)]).length}));
+    if(!cands.length)return null;
+    cands.sort((a,b)=>(a.score-b.score)+(rand()-.5)*.4);
+    const p=cands[0].n;vis[idx(p.x,p.y)]=1;path.push(p);cx=p.x;cy=p.y;
+    if(step%25===0)cb(step/TOTAL);
+  }
+  const last=path[path.length-1];
+  return Math.abs(last.x-sx)+Math.abs(last.y-sy)===1?path:null;
+}
+async function buildCycle(){
+  let cycle=null,att=0;
+  const bar=document.getElementById('gen-bar'),txt=document.getElementById('progress-text');
+  while(!cycle){
+    att++;txt.textContent=`Attempt ${att}...`;
+    await new Promise(r=>setTimeout(r,0));
+    cycle=tryBuild(p=>{bar.style.width=(p*100).toFixed(0)+'%';});
+  }
+  bar.style.width='100%';
+  txt.textContent=`✓ Done in ${att} attempt${att>1?'s':''}!`;
+  await new Promise(r=>setTimeout(r,400));
+  return cycle;
+}
+
+// State
+const MAX_LEN=380;
+let cycle=null;
+let snake=[],food=null;
+let cyclePos=0,loopCount=0;
+const STEP_MS=32;
+let lastStep=0,running=false;
+
+// Particles
+let particles=[];
+// Glow trail (ring buffer of recent head positions)
+const TRAIL_LEN=18;
+let trail=[];
+// Ripples
+let ripples=[];
+// Breath phase
+let breathPhase=0;
+
+function initSnake(){
+  snake=[];
+  for(let i=0;i<MAX_LEN;i++){
+    const ci=((0-i)%TOTAL+TOTAL)%TOTAL;
+    snake.push({...cycle[ci]});
+  }
+  cyclePos=0;loopCount=0;food=null;trail=[];particles=[];ripples=[];
+  placeFood();
+  document.getElementById('fill-bar').style.width='97.5%';
+  const el=document.getElementById('status');
+  el.textContent='◆ HAMILTONIAN LOOP — UNKILLABLE FOREVER ◆';
+  el.className='unkillable';
+}
+
+function placeFood(){
+  const occ=new Set(snake.map(s=>s.y*COLS+s.x));
+  const free=[];
+  for(let i=0;i<TOTAL;i++)if(!occ.has(i))free.push(i);
+  if(!free.length){food=null;return;}
+  const pick=free[rInt(free.length)];
+  food={x:pick%COLS,y:Math.floor(pick/COLS)};
+}
+
+function spawnParticles(x,y,hue){
+  for(let i=0;i<18;i++){
+    const angle=Math.random()*Math.PI*2;
+    const speed=1.2+Math.random()*3.5;
+    particles.push({
+      x:x*CELL+CELL/2, y:y*CELL+CELL/2,
+      vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed,
+      life:1.0, decay:0.04+Math.random()*0.04,
+      r:2+Math.random()*3,
+      hue:hue+rInt(60)-30
+    });
+  }
+}
+
+function spawnRipple(x,y,hue){
+  ripples.push({x:x*CELL+CELL/2, y:y*CELL+CELL/2, r:4, maxR:CELL*7, life:1.0, hue});
+}
+
+function step(){
+  cyclePos=(cyclePos+1)%TOTAL;
+  const next=cycle[cyclePos];
+
+  // Record trail
+  const head=snake[0];
+  trail.push({x:head.x*CELL+CELL/2, y:head.y*CELL+CELL/2});
+  if(trail.length>TRAIL_LEN)trail.shift();
+
+  snake.unshift({...next});
+  snake.pop();
+  if(cyclePos===0)loopCount++;
+
+  if(food&&next.x===food.x&&next.y===food.y){
+    const hue=(Date.now()/1000*70)%360;
+    spawnParticles(next.x,next.y,hue);
+    spawnRipple(next.x,next.y,hue);
+    placeFood();
+  }
+  if(!food)placeFood();
+}
+
+// Helpers
+function scx(s){return s.x*CELL+CELL/2;}
+function scy(s){return s.y*CELL+CELL/2;}
+
+function segHue(i,len,now){return(now*35+(1-i/len)*300)%360;}
+function segColor(i,len,now,breath){
+  const hue=segHue(i,len,now);
+  const tailFade=Math.max(0,(i-len*0.82)/(len*0.18));
+  const light=40+(1-i/len)*20+Math.sin(breath+i*0.08)*3;
+  const alpha=0.5+(1-tailFade)*(1-i/len)*0.5;
+  return{hue,light,alpha,tailFade};
+}
+
+// Draw scale diamond on a segment
+function drawScale(x,y,r,hue,light,alpha){
+  // Two small overlapping ovals = scale hint
+  ctx.save();
+  ctx.globalAlpha=alpha*0.22;
+  ctx.fillStyle=`hsl(${hue},80%,${light+20}%)`;
+  ctx.beginPath();ctx.ellipse(x-r*0.18,y-r*0.1,r*0.38,r*0.28,Math.PI*0.3,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(x+r*0.18,y+r*0.1,r*0.38,r*0.28,Math.PI*0.3,0,Math.PI*2);ctx.fill();
+  ctx.globalAlpha=1;
+  ctx.restore();
+}
+
+// Ghost cycle
+let ghostPath=null;
+function buildGhostPath(){
+  ghostPath=new Path2D();
+  const f=cycle[0];
+  ghostPath.moveTo(f.x*CELL+CELL/2,f.y*CELL+CELL/2);
+  for(let i=1;i<cycle.length;i++)ghostPath.lineTo(cycle[i].x*CELL+CELL/2,cycle[i].y*CELL+CELL/2);
+  ghostPath.closePath();
+}
+
+// ── DRAW ─────────────────────────────────────────────────────────────
+function draw(){
+  const now=Date.now()/1000;
+  breathPhase=now*1.8; // breathing speed
+
+  ctx.fillStyle='#03060a';
+  ctx.fillRect(0,0,W,H);
+
+  // Dot grid
+  ctx.fillStyle='rgba(255,255,255,0.025)';
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    ctx.beginPath();ctx.arc(c*CELL+CELL/2,r*CELL+CELL/2,1,0,Math.PI*2);ctx.fill();
+  }
+
+  // Ghost path
+  if(ghostPath){
+    ctx.save();ctx.strokeStyle='rgba(255,255,255,0.035)';ctx.lineWidth=1;
+    ctx.stroke(ghostPath);ctx.restore();
+  }
+
+  const len=snake.length;
+  if(len<2)return;
+  const RMAX=CELL*0.43;
+
+  // ── RIPPLES ──
+  for(let i=ripples.length-1;i>=0;i--){
+    const rp=ripples[i];
+    rp.r+=4.5;rp.life-=0.025;
+    if(rp.life<=0){ripples.splice(i,1);continue;}
+    ctx.save();
+    ctx.strokeStyle=`hsla(${rp.hue},100%,65%,${rp.life*0.5})`;
+    ctx.lineWidth=2*rp.life;
+    ctx.beginPath();ctx.arc(rp.x,rp.y,rp.r,0,Math.PI*2);ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── GLOW TRAIL (fading afterimage path behind head) ──
+  if(trail.length>1){
+    for(let i=0;i<trail.length-1;i++){
+      const tf=i/trail.length;
+      const trailHue=(now*35+300)%360;
+      ctx.save();
+      ctx.strokeStyle=`hsla(${trailHue},100%,65%,${tf*0.35})`;
+      ctx.lineWidth=(tf*RMAX*1.6);
+      ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(trail[i].x,trail[i].y);ctx.lineTo(trail[i+1].x,trail[i+1].y);ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // ── CONNECTORS ──
+  for(let i=len-1;i>0;i--){
+    const a=snake[i],b=snake[i-1];
+    const adx=Math.abs(a.x-b.x),ady=Math.abs(a.y-b.y);
+    if(adx+ady!==1)continue;
+    const {hue,light,alpha,tailFade}=segColor(i,len,now,breathPhase);
+    const R=RMAX*(1-tailFade*0.65);const GAP=1.1;
+    ctx.fillStyle=`hsla(${hue},88%,${light}%,${alpha})`;
+    const ax=scx(a),ay=scy(a),bx=scx(b),by=scy(b);
+    if(adx===1){ctx.fillRect(Math.min(ax,bx),ay-(R-GAP),CELL,(R-GAP)*2);}
+    else{ctx.fillRect(ax-(R-GAP),Math.min(ay,by),(R-GAP)*2,CELL);}
+  }
+
+  // ── SEGMENTS ──
+  for(let i=len-1;i>=0;i--){
+    const s=snake[i];
+    const {hue,light,alpha,tailFade}=segColor(i,len,now,breathPhase);
+    const R=RMAX*(1-tailFade*0.65);
+
+    // HEAD
+    if(i===0){
+      ctx.shadowColor=`hsl(${hue},100%,65%)`;ctx.shadowBlur=24;
+      ctx.fillStyle=`hsl(${hue},100%,58%)`;
+      ctx.beginPath();ctx.arc(scx(s),scy(s),R+2,0,Math.PI*2);ctx.fill();
+      ctx.shadowBlur=0;
+      // Head shine
+      ctx.fillStyle='rgba(255,255,255,0.3)';
+      ctx.beginPath();ctx.arc(scx(s)-R*0.24,scy(s)-R*0.27,R*0.34,0,Math.PI*2);ctx.fill();
+      // Eyes
+      if(len>1){
+        const neck=snake[1],ddx=s.x-neck.x,ddy=s.y-neck.y,er=2.1;
+        ctx.fillStyle='rgba(0,0,0,0.9)';
+        if(ddx===1){ctx.beginPath();ctx.arc(scx(s)+R*0.3,scy(s)-R*0.36,er,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(scx(s)+R*0.3,scy(s)+R*0.36,er,0,Math.PI*2);ctx.fill();}
+        else if(ddx===-1){ctx.beginPath();ctx.arc(scx(s)-R*0.3,scy(s)-R*0.36,er,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(scx(s)-R*0.3,scy(s)+R*0.36,er,0,Math.PI*2);ctx.fill();}
+        else if(ddy===1){ctx.beginPath();ctx.arc(scx(s)-R*0.36,scy(s)+R*0.3,er,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(scx(s)+R*0.36,scy(s)+R*0.3,er,0,Math.PI*2);ctx.fill();}
+        else{ctx.beginPath();ctx.arc(scx(s)-R*0.36,scy(s)-R*0.3,er,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(scx(s)+R*0.36,scy(s)-R*0.3,er,0,Math.PI*2);ctx.fill();}
+        ctx.fillStyle='rgba(255,255,255,0.8)';
+        if(ddx===1){ctx.beginPath();ctx.arc(scx(s)+R*0.3-1,scy(s)-R*0.36-1,.85,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(scx(s)+R*0.3-1,scy(s)+R*0.36-1,.85,0,Math.PI*2);ctx.fill();}
+        else if(ddx===-1){ctx.beginPath();ctx.arc(scx(s)-R*0.3-1,scy(s)-R*0.36-1,.85,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(scx(s)-R*0.3-1,scy(s)+R*0.36-1,.85,0,Math.PI*2);ctx.fill();}
+        else if(ddy===1){ctx.beginPath();ctx.arc(scx(s)-R*0.36-1,scy(s)+R*0.3-1,.85,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(scx(s)+R*0.36-1,scy(s)+R*0.3-1,.85,0,Math.PI*2);ctx.fill();}
+        else{ctx.beginPath();ctx.arc(scx(s)-R*0.36-1,scy(s)-R*0.3-1,.85,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(scx(s)+R*0.36-1,scy(s)-R*0.3-1,.85,0,Math.PI*2);ctx.fill();}
+      }
+      continue;
+    }
+
+    // BODY SEGMENT
+    ctx.fillStyle=`hsla(${hue},88%,${light}%,${alpha})`;
+    ctx.beginPath();ctx.arc(scx(s),scy(s),R,0,Math.PI*2);ctx.fill();
+
+    // Scale texture
+    if(tailFade<0.7 && R>4){
+      drawScale(scx(s),scy(s),R,hue,light,alpha);
+    }
+
+    // Shine
+    const sf=1-i/len;
+    if(sf>0.15){
+      ctx.fillStyle=`rgba(255,255,255,${sf*0.12})`;
+      ctx.beginPath();ctx.arc(scx(s)-R*0.22,scy(s)-R*0.25,R*0.3,0,Math.PI*2);ctx.fill();
+    }
+  }
+
+  // ── PARTICLES ──
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx;p.y+=p.vy;p.vx*=0.92;p.vy*=0.92;p.life-=p.decay;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    ctx.save();
+    ctx.shadowColor=`hsl(${p.hue},100%,65%)`;ctx.shadowBlur=8*p.life;
+    ctx.fillStyle=`hsla(${p.hue},100%,65%,${p.life})`;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;ctx.restore();
+  }
+
+  // ── FOOD ──
+  if(food){
+    const p=0.5+0.5*Math.sin(now*4.5);
+    const fhue=(now*70)%360;
+    const fx=food.x*CELL+CELL/2,fy=food.y*CELL+CELL/2;
+    ctx.save();
+    ctx.shadowColor=`hsl(${fhue},100%,65%)`;ctx.shadowBlur=18+p*12;
+    ctx.strokeStyle=`hsla(${fhue},100%,65%,${p*0.5})`;ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(fx,fy,RMAX*0.85+p*4,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle=`hsl(${fhue},100%,60%)`;
+    ctx.beginPath();ctx.arc(fx,fy,RMAX*0.52,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;ctx.restore();
+    ctx.fillStyle=`rgba(255,255,255,${0.45+p*0.35})`;
+    ctx.beginPath();ctx.arc(fx-RMAX*0.17,fy-RMAX*0.19,RMAX*0.18,0,Math.PI*2);ctx.fill();
+  }
+}
+
+function updateStats(){
+  document.getElementById('len').textContent=snake.length;
+  document.getElementById('maxlen').textContent=TOTAL;
+  document.getElementById('loops').textContent=loopCount;
+  document.getElementById('cyclepos').textContent=cyclePos;
+}
+
+function gameLoop(ts){
+  if(!running)return;
+  requestAnimationFrame(gameLoop);
+  draw();
+  if(ts-lastStep>STEP_MS){step();updateStats();lastStep=ts;}
+}
+
+(async()=>{
+  cycle=await buildCycle();
+  document.getElementById('overlay').style.display='none';
+  buildGhostPath();
+  initSnake();
+  running=true;
+  requestAnimationFrame(gameLoop);
+})();
+
+</script>
+</body>
+</html>

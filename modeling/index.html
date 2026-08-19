@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Mini 3D Modeling App — Complete MVP</title>
+<style>
+:root{ --bg:#0f1226; --panel:rgba(255,255,255,0.06); --accent:#6cf; --muted:#9aa; }
+html,body{ height:100%; margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Arial; background:linear-gradient(180deg,#0b0f1a,#071022); color:#dfe7ff; }
+#app{ height:100vh; display:grid; grid-template-columns:320px 1fr; gap:12px; align-items:stretch; padding:12px; box-sizing:border-box; }
+.panel{ background:var(--panel); border-radius:12px; padding:12px; box-shadow:0 6px 24px rgba(0,0,0,0.6); }
+#left{ display:flex; flex-direction:column; gap:12px; }
+h1{ font-size:16px; margin:0 0 6px 0; }
+label{ display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }
+button,input,select{ font-size:13px; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); background:transparent; color:inherit; }
+.row{ display:flex; gap:8px; }
+#canvasWrap{ position:relative; border-radius:12px; overflow:hidden; }
+canvas{ display:block; width:100%; height:100%; }
+.tool-grid{ display:flex; flex-wrap:wrap; gap:8px; }
+.tool-grid button{ flex:1 1 48%; }
+.prop { display:flex; flex-direction:column; gap:6px; }
+.muted{ color:var(--muted); font-size:12px; }
+footer{ font-size:12px; color:var(--muted); text-align:center; }
+#topbar{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+#rightShortcuts{ display:flex; gap:8px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="left" class="panel">
+    <div id="topbar">
+      <div>
+        <h1>Mini 3D Modeler</h1>
+        <div class="muted">Primitives, Transform tools, GLTF/JSON, Sculpt, Paint</div>
+      </div>
+      <div id="rightShortcuts">
+        <button id="btnSnapshot">📸</button>
+        <button id="btnExport">Export GLTF</button>
+      </div>
+    </div>
+
+    <div class="prop panel">
+      <label>Add Primitive</label>
+      <div class="tool-grid">
+        <button id="addBox">Cube</button>
+        <button id="addSphere">Sphere</button>
+        <button id="addTorus">Torus</button>
+        <button id="addPlane">Plane</button>
+      </div>
+    </div>
+
+    <div class="prop panel">
+      <label>Selection / Transform</label>
+      <div class="row">
+        <select id="transformMode">
+          <option value="translate">Translate</option>
+          <option value="rotate">Rotate</option>
+          <option value="scale">Scale</option>
+        </select>
+        <button id="deleteObj">Delete</button>
+      </div>
+      <div class="muted">Click an object to select it. Use gizmo to manipulate.</div>
+    </div>
+
+    <div class="prop panel">
+      <label>Material Editor</label>
+      <input type="color" id="matColor" value="#00ffff">
+      <label class="muted">Metalness</label>
+      <input id="matMetal" type="range" min="0" max="1" step="0.01" value="0.1">
+      <label class="muted">Roughness</label>
+      <input id="matRough" type="range" min="0" max="1" step="0.01" value="0.5">
+      <button id="applyMat">Apply to selected</button>
+    </div>
+
+    <div class="prop panel">
+      <label>Scene I/O</label>
+      <div class="row">
+        <input id="importFile" type="file" accept=".gltf,.glb,.json">
+        <button id="btnLoad">Load</button>
+      </div>
+      <div class="row">
+        <button id="btnSaveJSON">Save Scene JSON</button>
+        <button id="btnClear">Clear</button>
+      </div>
+      <div class="muted">GLTF import/export and scene JSON snapshot.</div>
+    </div>
+
+    <footer class="muted">Built with Three.js — single-file MVP</footer>
+  </div>
+
+  <div id="viewportWrap">
+    <div id="canvasWrap" class="panel" style="height:calc(100vh - 48px);">
+      <canvas id="viewport"></canvas>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// --- Imports (change to ./libs/ if needed) ---
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+// --- Scene Setup ---
+const canvas = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:true});
+renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x071022);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(4,4,6);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x222222, 0.6));
+const dirLight = new THREE.DirectionalLight(0xffffff,0.8);
+dirLight.position.set(5,10,7);
+scene.add(dirLight);
+
+const grid = new THREE.GridHelper(50,50,0x444444,0x111111);
+grid.material.opacity = 0.25; grid.material.transparent = true;
+scene.add(grid);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// --- Transform Controls ---
+const transform = new TransformControls(camera, renderer.domElement);
+scene.add(transform);
+transform.addEventListener('dragging-changed', e=>controls.enabled=!e.value);
+
+// --- Selection ---
+let selected = null;
+let sculptMode=false, paintMode=false, mirrorMode=false;
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+// --- Utilities ---
+function addMesh(mesh){
+  mesh.position.set(0,1,0);
+  scene.add(mesh);
+  select(mesh);
+}
+
+function select(obj){
+  if(selected) transform.detach();
+  selected = obj;
+  transform.attach(selected);
+}
+
+// --- Primitive creation ---
+function makeMesh(type){
+  let geo;
+  switch(type){
+    case 'box': geo = new THREE.BoxGeometry(1,1,1,20,20,20); break;
+    case 'sphere': geo = new THREE.SphereGeometry(0.6,32,24); break;
+    case 'plane': geo = new THREE.PlaneGeometry(2,2,20,20); break;
+    case 'torus': geo = new THREE.TorusGeometry(0.5,0.2,32,64); break;
+    default: geo = new THREE.BoxGeometry(1,1,1,20,20,20);
+  }
+  const mat = new THREE.MeshStandardMaterial({color:0x00ffff, metalness:0.1, roughness:0.5, vertexColors:true});
+  enableVertexColors(mat,geo);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.selectable = true;
+  return mesh;
+}
+
+function enableVertexColors(mat,geo){
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count*3);
+  for(let i=0;i<pos.count;i++){ colors[i*3]=1; colors[i*3+1]=1; colors[i*3+2]=1; }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors,3));
+  mat.vertexColors = true;
+}
+
+// --- Add primitives buttons ---
+document.getElementById('addBox').onclick = ()=>addMesh(makeMesh('box'));
+document.getElementById('addSphere').onclick = ()=>addMesh(makeMesh('sphere'));
+document.getElementById('addPlane').onclick = ()=>addMesh(makeMesh('plane'));
+document.getElementById('addTorus').onclick = ()=>addMesh(makeMesh('torus'));
+
+// --- Delete ---
+document.getElementById('deleteObj').onclick = ()=>{ if(selected){ scene.remove(selected); transform.detach(); selected=null;} };
+
+// --- Transform mode select ---
+document.getElementById('transformMode').onchange = e=>{ transform.setMode(e.target.value); };
+
+// --- Material editor ---
+const matColor = document.getElementById('matColor');
+const matMetal = document.getElementById('matMetal');
+const matRough = document.getElementById('matRough');
+document.getElementById('applyMat').onclick = ()=>{
+  if(!selected) return;
+  selected.material.color.set(matColor.value);
+  selected.material.metalness = parseFloat(matMetal.value);
+  selected.material.roughness = parseFloat(matRough.value);
+};
+
+// --- Mouse Sculpt / Paint ---
+let isDragging=false;
+canvas.addEventListener('pointerdown',()=>isDragging=true);
+canvas.addEventListener('pointerup',()=>isDragging=false);
+canvas.addEventListener('pointermove', e=>{
+  if(!isDragging || (!sculptMode && !paintMode) || !selected) return;
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((e.clientX-rect.left)/rect.width)*2-1;
+  mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
+  ray.setFromCamera(mouse,camera);
+  const hits = ray.intersectObject(selected);
+  if(hits.length){
+    const face = hits[0].face;
+    const pos = selected.geometry.attributes.position;
+    const colors = selected.geometry.attributes.color;
+    [face.a, face.b, face.c].forEach(i=>{
+      if(sculptMode){ pos.setY(i,pos.getY(i)+0.02); if(mirrorMode){ const m = findMirrorVertex(i,pos); if(m!==null) pos.setY(m,pos.getY(m)+0.02); } }
+      if(paintMode){ 
+        const c = new THREE.Color(matColor.value);
+        colors.setXYZ(i,c.r,c.g,c.b);
+        if(mirrorMode){ const m = findMirrorVertex(i,pos); if(m!==null) colors.setXYZ(m,c.r,c.g,c.b); }
+      }
+    });
+    pos.needsUpdate=true;
+    if(paintMode) colors.needsUpdate=true;
+  }
+});
+
+// --- Mirror helper ---
+function findMirrorVertex(i,pos){
+  const x = pos.getX(i);
+  for(let j=0;j<pos.count;j++){
+    if(i!==j && Math.abs(pos.getX(j)+x)<0.01 && Math.abs(pos.getY(j)-pos.getY(i))<0.01 && Math.abs(pos.getZ(j)-pos.getZ(i))<0.01) return j;
+  }
+  return null;
+}
+
+// --- Object selection by click ---
+canvas.addEventListener('pointerdown', e=>{
+  if(sculptMode||paintMode) return;
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((e.clientX-rect.left)/rect.width)*2-1;
+  mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
+  ray.setFromCamera(mouse,camera);
+  const hits = ray.intersectObjects(scene.children,true).filter(o=>o.object.userData.selectable);
+  if(hits.length) select(hits[0].object);
+});
+
+// --- Shortcut keys ---
+document.addEventListener('keydown', e=>{
+  if(e.key==='c') sculptMode=!sculptMode;
+  if(e.key==='v') paintMode=!paintMode;
+  if(e.key==='m') mirrorMode=!mirrorMode;
+});
+
+// --- Snapshot ---
+document.getElementById('btnSnapshot').onclick = ()=>{
+  const link = document.createElement('a');
+  link.download = 'scene.png';
+  link.href = renderer.domElement.toDataURL('image/png');
+  link.click();
+};
+
+// --- GLTF Export ---
+const exporter = new GLTFExporter();
+document.getElementById('btnExport').onclick = ()=>{
+  exporter.parse(scene, gltf=>{ 
+    const blob = new Blob([JSON.stringify(gltf)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href=url; link.download='scene.gltf'; link.click();
+  });
+};
+
+// --- Scene Save/Load JSON ---
+document.getElementById('btnSaveJSON').onclick = ()=>{
+  const json = scene.toJSON();
+  const blob = new Blob([JSON.stringify(json)], {type:'application/json'});
+  const link = document.createElement('a'); link.href=URL.createObjectURL(blob); link.download='scene.json'; link.click();
+};
+
+document.getElementById('btnClear').onclick = ()=>{
+  scene.children.slice().forEach(c=>{ if(c.userData.selectable) scene.remove(c); });
+  selected=null; transform.detach();
+};
+
+// --- Load file ---
+document.getElementById('btnLoad').onclick = ()=>{
+  const file = document.getElementById('importFile').files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    const data = e.target.result;
+    if(file.name.endsWith('.json')){
+      const loader = new THREE.ObjectLoader();
+      const obj = loader.parse(JSON.parse(data));
+      scene.add(obj);
+    }else if(file.name.endsWith('.gltf') || file.name.endsWith('.glb')){
+      const loader = new GLTFLoader();
+      loader.parse(data, '', gltf=>scene.add(gltf.scene));
+    }
+  };
+  if(file.name.endsWith('.glb')) reader.readAsArrayBuffer(file);
+  else reader.readAsText(file);
+};
+
+// --- Resize ---
+window.addEventListener('resize', ()=>{ camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+// --- Animate ---
+function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); }
+animate();
+
+</script>
+</body>
+</html>

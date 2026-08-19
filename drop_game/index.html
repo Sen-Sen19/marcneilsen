@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plinko + Spinning Disk</title>
+<style>
+    body { margin:0; overflow:hidden; background:#101020; }
+    canvas { display:block; }
+</style>
+</head>
+<body>
+<script src="../plugins/pixi.min.js"></script>
+<script src="../plugins/matter.min.js"></script>
+<script>
+// --- PIXI Setup ---
+const app = new PIXI.Application({ 
+    width: 800, 
+    height: 600, 
+    backgroundColor: 0x101020 
+});
+document.body.appendChild(app.view);
+
+// --- Matter.js Setup ---
+const { Engine, Render, Runner, Bodies, Body, World, Events, Mouse, MouseConstraint, Composite } = Matter;
+const engine = Engine.create();
+const world = engine.world;
+engine.gravity.y = 1.0;
+
+// --- Pegs Setup ---
+const pegRadius = 8;
+const pegRows = 10;
+const pegCols = 11;
+const pegSpacingX = 60;
+const pegSpacingY = 50;
+const pegs = [];
+
+for (let row = 0; row < pegRows; row++) {
+    for (let col = 0; col < pegCols; col++) {
+        let offsetX = (row % 2) * pegSpacingX/2;
+        let x = 100 + col * pegSpacingX + offsetX;
+        let y = 50 + row * pegSpacingY;
+        let peg = Bodies.circle(x, y, pegRadius, { isStatic: true, restitution: 0.9 });
+        World.add(world, peg);
+        pegs.push(peg);
+
+        // Pixi graphics
+        const pegG = new PIXI.Graphics();
+        pegG.beginFill(0xffffff);
+        pegG.drawCircle(0,0,pegRadius);
+        pegG.endFill();
+        pegG.x = x; pegG.y = y;
+        app.stage.addChild(pegG);
+        peg.gfx = pegG;
+    }
+}
+
+// --- Spinning Disk Setup ---
+const diskRadius = 100;
+const diskX = app.view.width/2;
+const diskY = app.view.height - 100;
+const numHoles = 8;
+const holeRadius = 20;
+
+// Matter disk (invisible, just to stop ball in center)
+const disk = Bodies.circle(diskX, diskY, diskRadius, { isStatic: true, isSensor:true });
+World.add(world, disk);
+
+// Pixi disk graphics
+const diskG = new PIXI.Graphics();
+diskG.beginFill(0x2222ff);
+diskG.drawCircle(0,0,diskRadius);
+diskG.endFill();
+diskG.x = diskX;
+diskG.y = diskY;
+app.stage.addChild(diskG);
+
+// Holes visualization
+const holeGs = [];
+for (let i=0;i<numHoles;i++){
+    const angle = (i/numHoles) * Math.PI*2;
+    const hx = diskX + Math.cos(angle)*(diskRadius - holeRadius);
+    const hy = diskY + Math.sin(angle)*(diskRadius - holeRadius);
+    const hG = new PIXI.Graphics();
+    hG.beginFill(0x101020);
+    hG.drawCircle(0,0,holeRadius);
+    hG.endFill();
+    hG.x = hx; hG.y = hy;
+    app.stage.addChild(hG);
+    holeGs.push({gfx:hG,x:hx,y:hy});
+}
+
+// --- Ball setup ---
+let ball = null;
+
+function createBall(x,y){
+    ball = Bodies.circle(x,y,15, { restitution: 0.6, friction:0.02 });
+    World.add(world, ball);
+
+    const ballG = new PIXI.Graphics();
+    ballG.beginFill(0xffdd00);
+    ballG.drawCircle(0,0,15);
+    ballG.endFill();
+    app.stage.addChild(ballG);
+    ball.gfx = ballG;
+}
+
+// --- Mouse Drag ---
+app.view.addEventListener('pointerdown', e=>{
+    if(!ball){
+        createBall(e.clientX,e.clientY);
+    }
+});
+
+// --- Update loop ---
+app.ticker.add(()=>{
+    Engine.update(engine, 16);
+
+    // Update pegs (static, no need)
+    // Update ball
+    if(ball){
+        ball.gfx.x = ball.position.x;
+        ball.gfx.y = ball.position.y;
+    }
+
+    // Rotate disk
+    diskG.rotation += 0.02;
+    holeGs.forEach((h,i)=>{
+        const angle = (i/numHoles)*Math.PI*2 + diskG.rotation;
+        h.gfx.x = diskX + Math.cos(angle)*(diskRadius - holeRadius);
+        h.gfx.y = diskY + Math.sin(angle)*(diskRadius - holeRadius);
+    });
+});
+
+</script>
+</body>
+</html>

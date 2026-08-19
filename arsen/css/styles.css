@@ -1,0 +1,59 @@
+:root {
+  --bg: #0b0d12;
+  --panel: rgba(255,255,255,0.06);
+  --panel-strong: rgba(255,255,255,0.12);
+  --accent: #7dd3fc;
+  --text: #e5e7eb;
+}
+body {
+  margin: 0;
+  display: flex;
+  background: var(--bg);
+  color: var(--text);
+  font-family: sans-serif;
+}
+.sidebar {
+  width: 220px;
+  background: var(--panel);
+  padding: 10px;
+}
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+}
+.sidebar li {
+  cursor: pointer;
+  padding: 6px;
+}
+.sidebar li:hover {
+  background: var(--panel-strong);
+}
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.toolbar {
+  background: var(--panel);
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+}
+.canvas {
+  flex: 1;
+  background: #1a1c23;
+  position: relative;
+  overflow: hidden;
+}
+.shape {
+  position: absolute;
+  user-select: none;
+  cursor: move;
+  border: 1px solid var(--panel-strong);
+  padding: 8px;
+}
+.panel {
+  width: 220px;
+  background: var(--panel);
+  padding: 10px;
+}

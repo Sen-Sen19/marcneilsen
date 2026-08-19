@@ -1,0 +1,358 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>1 Second Panic</title>
+<style>
+body{
+margin:0;
+background:#000;
+overflow:hidden;
+font-family:monospace;
+color:white;
+}
+
+canvas{
+display:block;
+}
+
+#ui{
+position:fixed;
+top:10px;
+left:10px;
+font-size:18px;
+}
+
+#center{
+position:fixed;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+font-size:28px;
+text-align:center;
+pointer-events:none;
+}
+</style>
+</head>
+
+<body>
+
+<div id="ui">
+TIME: <span id="score">0</span><br>
+BEST: <span id="best">0</span>
+</div>
+
+<div id="center"></div>
+
+<canvas id="game"></canvas>
+
+<script>
+
+const canvas = document.getElementById("game")
+const ctx = canvas.getContext("2d")
+
+canvas.width = window.innerWidth
+canvas.height = window.innerHeight
+
+const scoreUI = document.getElementById("score")
+const bestUI = document.getElementById("best")
+const centerText = document.getElementById("center")
+
+let best = localStorage.getItem("panicBest") || 0
+bestUI.textContent = best
+
+let player = {
+x:canvas.width/2,
+y:canvas.height/2,
+r:10,
+vx:0,
+vy:0,
+speed:0.6
+}
+
+let bullets=[]
+let lasers=[]
+let blackholes=[]
+let score=0
+let alive=true
+
+let keys={}
+
+document.addEventListener("keydown",e=>keys[e.key]=true)
+document.addEventListener("keyup",e=>keys[e.key]=false)
+
+function spawnBulletStorm(){
+
+for(let i=0;i<15;i++){
+
+let side=Math.floor(Math.random()*4)
+
+let x,y,vx,vy
+
+if(side===0){
+x=0
+y=Math.random()*canvas.height
+vx=2+Math.random()*2
+vy=(Math.random()-0.5)*2
+}
+
+if(side===1){
+x=canvas.width
+y=Math.random()*canvas.height
+vx=-(2+Math.random()*2)
+vy=(Math.random()-0.5)*2
+}
+
+if(side===2){
+x=Math.random()*canvas.width
+y=0
+vx=(Math.random()-0.5)*2
+vy=2+Math.random()*2
+}
+
+if(side===3){
+x=Math.random()*canvas.width
+y=canvas.height
+vx=(Math.random()-0.5)*2
+vy=-(2+Math.random()*2)
+}
+
+bullets.push({x,y,vx,vy,r:5})
+}
+
+flash("BULLET STORM")
+
+}
+
+function spawnLaser(){
+
+let angle=Math.random()*Math.PI
+
+lasers.push({
+angle,
+life:120
+})
+
+flash("LASER")
+
+}
+
+function spawnBlackHole(){
+
+blackholes.push({
+x:Math.random()*canvas.width,
+y:Math.random()*canvas.height,
+power:2000,
+life:300
+})
+
+flash("BLACK HOLE")
+
+}
+
+function randomEvent(){
+
+let r=Math.random()
+
+if(r<0.4) spawnBulletStorm()
+else if(r<0.7) spawnLaser()
+else spawnBlackHole()
+
+}
+
+setInterval(()=>{
+if(!alive) return
+score++
+scoreUI.textContent=score
+randomEvent()
+},1000)
+
+function flash(text){
+
+centerText.textContent=text
+
+setTimeout(()=>{
+centerText.textContent=""
+},500)
+
+}
+
+function update(){
+
+if(!alive) return
+
+if(keys["ArrowUp"]||keys["w"]) player.vy-=player.speed
+if(keys["ArrowDown"]||keys["s"]) player.vy+=player.speed
+if(keys["ArrowLeft"]||keys["a"]) player.vx-=player.speed
+if(keys["ArrowRight"]||keys["d"]) player.vx+=player.speed
+
+player.vx*=0.92
+player.vy*=0.92
+
+player.x+=player.vx
+player.y+=player.vy
+
+player.x=Math.max(player.r,Math.min(canvas.width-player.r,player.x))
+player.y=Math.max(player.r,Math.min(canvas.height-player.r,player.y))
+
+for(let b of bullets){
+
+b.x+=b.vx
+b.y+=b.vy
+
+let dx=player.x-b.x
+let dy=player.y-b.y
+
+if(Math.hypot(dx,dy)<player.r+b.r){
+gameOver()
+}
+
+}
+
+for(let h of blackholes){
+
+let dx=h.x-player.x
+let dy=h.y-player.y
+let d=Math.hypot(dx,dy)
+
+let force=h.power/(d*d+100)
+
+player.vx+=dx/d*force
+player.vy+=dy/d*force
+
+h.life--
+
+}
+
+blackholes=blackholes.filter(h=>h.life>0)
+
+for(let l of lasers){
+
+l.angle+=0.02
+l.life--
+
+let px=player.x-canvas.width/2
+let py=player.y-canvas.height/2
+
+let dist=Math.abs(px*Math.sin(l.angle)-py*Math.cos(l.angle))
+
+if(dist<8) gameOver()
+
+}
+
+lasers=lasers.filter(l=>l.life>0)
+
+}
+
+function draw(){
+
+ctx.fillStyle="black"
+ctx.fillRect(0,0,canvas.width,canvas.height)
+
+ctx.shadowBlur=20
+ctx.shadowColor="#00ffff"
+
+ctx.fillStyle="#00ffff"
+
+ctx.beginPath()
+ctx.arc(player.x,player.y,player.r,0,Math.PI*2)
+ctx.fill()
+
+ctx.shadowBlur=0
+
+ctx.fillStyle="white"
+
+for(let b of bullets){
+
+ctx.beginPath()
+ctx.arc(b.x,b.y,b.r,0,Math.PI*2)
+ctx.fill()
+
+}
+
+for(let h of blackholes){
+
+ctx.strokeStyle="purple"
+ctx.beginPath()
+ctx.arc(h.x,h.y,20,0,Math.PI*2)
+ctx.stroke()
+
+}
+
+for(let l of lasers){
+
+ctx.strokeStyle="red"
+
+ctx.beginPath()
+
+let x1=canvas.width/2+Math.cos(l.angle)*2000
+let y1=canvas.height/2+Math.sin(l.angle)*2000
+
+let x2=canvas.width/2-Math.cos(l.angle)*2000
+let y2=canvas.height/2-Math.sin(l.angle)*2000
+
+ctx.moveTo(x1,y1)
+ctx.lineTo(x2,y2)
+
+ctx.stroke()
+
+}
+
+}
+
+function gameOver(){
+
+alive=false
+
+centerText.innerHTML="GAME OVER<br>PRESS SPACE"
+
+if(score>best){
+best=score
+localStorage.setItem("panicBest",best)
+bestUI.textContent=best
+}
+
+}
+
+document.addEventListener("keydown",e=>{
+
+if(e.code==="Space" && !alive){
+restart()
+}
+
+})
+
+function restart(){
+
+bullets=[]
+lasers=[]
+blackholes=[]
+score=0
+alive=true
+
+player.x=canvas.width/2
+player.y=canvas.height/2
+player.vx=0
+player.vy=0
+
+centerText.textContent=""
+scoreUI.textContent=0
+
+}
+
+function loop(){
+
+update()
+draw()
+requestAnimationFrame(loop)
+
+}
+
+loop()
+
+</script>
+
+</body>
+</html>
+```

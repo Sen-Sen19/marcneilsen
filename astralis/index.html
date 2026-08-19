@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Image Generator - Modal History</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.0/css/all.min.css">
+<style>
+body {
+  background: #0a0a0d;
+  color: #ddd;
+  font-family: 'Segoe UI', sans-serif;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.container { 
+  width: 100%;
+  max-width: 900px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* Prompt Bar Fixed */
+.prompt-box {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: rgba(25,25,25,0.95);
+  border-top: 1px solid #555;
+  padding: 10px;
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+}
+
+#prompt {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #eee;
+  font-size: 15px;
+  padding: 5px 10px;
+}
+#prompt:focus { outline: none; }
+
+button {
+  background: rgba(100,100,100,0.1);
+  border: 1px solid #777;
+  color: #ccc;
+  padding: 8px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+button:hover {
+  background: rgba(150,150,150,0.2);
+}
+
+/* Content Padding */
+.content { padding-bottom: 80px; display: flex; flex-direction: column; gap: 15px; }
+
+/* Preview Box */
+#preview-box {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid #555;
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+  min-height: 300px;
+}
+#preview-box img {
+  width: 100%;
+  border-radius: 10px;
+  transition: 0.3s;
+}
+#preview-box img:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 10px rgba(100,100,100,0.3);
+}
+
+/* Loader */
+.loader {
+  border: 4px solid rgba(100,100,100,0.2);
+  border-top: 4px solid #aaa;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  margin: 30px auto;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* Modal Styles */
+.modal-backdrop {
+  position: fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background: rgba(0,0,0,0.7);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+.modal {
+  background: #222;
+  padding: 20px;
+  border-radius: 10px;
+  max-width: 800px;
+  width: 90%;
+  max-height: 80%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-header h2 { margin:0; font-size:18px; }
+.close-modal {
+  background: rgba(255,0,0,0.3);
+  border:none;
+  color:#eee;
+  font-size:16px;
+  border-radius:50%;
+  width:25px;
+  height:25px;
+  cursor:pointer;
+}
+
+/* Gallery in modal */
+#gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px,1fr));
+  gap: 10px;
+}
+.gallery-item {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid #555;
+  border-radius: 10px;
+  padding: 5px;
+  position: relative;
+}
+.gallery-item img {
+  width: 100%;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+.gallery-item img:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 10px rgba(100,100,100,0.3);
+}
+
+.delete-btn {
+  position: absolute;
+  top: 5px; right:5px;
+  background: rgba(255,0,0,0.3);
+  border:1px solid #900;
+  color:#eee;
+  border-radius:50%;
+  width:22px; height:22px;
+  font-size:14px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.delete-btn:hover { background: rgba(255,0,0,0.5); }
+
+@media(max-width:600px){
+  .container{padding:10px;}
+  #preview-box{min-height:200px;}
+  .prompt-box{flex-direction: column; border-radius: 0;}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="content">
+    <!-- Preview -->
+    <div id="preview-box"><p>🖼️ Your generated image will appear here</p></div>
+  </div>
+
+  <!-- Prompt Bar Fixed -->
+  <div class="prompt-box">
+    <input type="text" id="prompt" placeholder="Describe your image...">
+    <button id="dice">🎲</button>
+    <button id="generate">Generate</button>
+
+  </div>
+</div>
+
+<!-- Modal for history -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Generated Images</h2>
+      <button class="close-modal" id="close-modal">&times;</button>
+    </div>
+    <div id="gallery"></div>
+  </div>
+</div>
+<script>
+const promptInput = document.getElementById("prompt");
+const preview = document.getElementById("preview-box");
+const modalBackdrop = document.getElementById("modal-backdrop");
+const modalGallery = document.getElementById("gallery");
+
+let history = JSON.parse(localStorage.getItem("ai_gallery")) || [];
+let lastPreview = null; // don't load last preview on page load
+
+/* 🎲 Random prompt */
+const ideas = [
+  "Cyberpunk alley glowing with holograms",
+  "Dragon made of stars soaring through space",
+  "Neon samurai standing under a rainy Tokyo night"
+];
+document.getElementById("dice").addEventListener("click", () =>
+  promptInput.value = ideas[Math.floor(Math.random() * ideas.length)]
+);
+
+/* Open history modal */
+const openHistoryBtn = document.createElement("button");
+openHistoryBtn.textContent = "History 📜";
+openHistoryBtn.className = "btn-dark-sm";
+document.querySelector(".prompt-box").appendChild(openHistoryBtn);
+
+openHistoryBtn.addEventListener("click", () => {
+  modalGallery.innerHTML = "";
+  history.forEach(item => renderGalleryItem(item, modalGallery));
+  modalBackdrop.style.display = "flex";
+});
+
+document.getElementById("close-modal").addEventListener("click", () => {
+  modalBackdrop.style.display = "none";
+});
+
+/* 🚀 Generate new image */
+document.getElementById("generate").addEventListener("click", async () => {
+  const prompt = promptInput.value.trim() || "Futuristic neon city";
+  const id = Date.now();
+  preview.innerHTML = `<div class="loader"></div><p>⏳ Generating...</p>`;
+
+  const imgUrl = await generateImage(prompt);
+
+  const newItem = { prompt, url: imgUrl, id };
+
+  // Add new item to history
+  history.unshift(newItem);
+  if (history.length > 50) history = history.slice(0, 50); // keep max 50
+  localStorage.setItem("ai_gallery", JSON.stringify(history));
+
+  showPreview(imgUrl, prompt, id);
+  lastPreview = newItem;
+
+  // Optional: also render in modal immediately
+  renderGalleryItem(newItem, modalGallery);
+
+  promptInput.value = "";
+});
+
+
+/* Dummy AI fetch */
+async function generateImage(prompt) {
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&rand=${Date.now()}`;
+}
+
+/* Show preview */
+function showPreview(url, prompt, id) {
+  preview.innerHTML = `
+    <strong>📝 ${prompt}</strong>
+    <img src="${url}">
+    <div style="margin-top:5px;">
+      <button class="btn-dark" onclick="downloadImage('${url}')">⬇ Download</button>
+    </div>
+    <p style="font-size:12px;color:#aaa;">Latest generated</p>
+  `;
+}
+
+/* Render gallery items in modal */
+function renderGalleryItem(item, container) {
+  if(container.querySelector(`.gallery-item[data-id="${item.id}"]`)) return;
+
+  const div = document.createElement("div");
+  div.className = "gallery-item";
+  div.dataset.id = item.id;
+
+  // Delete button
+  const delBtn = document.createElement("button");
+  delBtn.className = "delete-btn";
+  delBtn.textContent = "✖";
+  delBtn.addEventListener("click", () => {
+    deleteImage(item.id);
+    div.remove();
+  });
+  div.appendChild(delBtn);
+
+  // Image
+  const img = document.createElement("img");
+  img.src = item.url;
+  img.alt = item.prompt;
+  img.addEventListener("click", () => openInPreview(item.url, item.prompt, item.id));
+  div.appendChild(img);
+
+  // Caption & download
+  const infoDiv = document.createElement("div");
+  infoDiv.style = "display:flex;justify-content:space-between;align-items:center;margin-top:3px;";
+
+  const p = document.createElement("p");
+  p.style = "font-size:12px;color:#aaa;margin:0;";
+  p.textContent = item.prompt;
+  infoDiv.appendChild(p);
+
+  const dlBtn = document.createElement("button");
+  dlBtn.className = "btn-dark-sm";
+  dlBtn.textContent = "⬇";
+  dlBtn.addEventListener("click", () => downloadImage(item.url));
+  infoDiv.appendChild(dlBtn);
+
+  div.appendChild(infoDiv);
+
+  container.prepend(div);
+}
+
+/* Download image */
+function downloadImage(url) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ai_image.png";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+/* Delete with confirmation */
+function deleteImage(id) {
+  showConfirm("🗑️ Delete this image?", "Yes, delete", "Cancel", () => {
+    history = history.filter(i => i.id !== id);
+    localStorage.setItem("ai_gallery", JSON.stringify(history));
+  });
+}
+
+/* Open in preview */
+function openInPreview(url, prompt, id) {
+  showPreview(url, prompt, id);
+}
+
+/* Confirmation modal */
+function showConfirm(msg, okText, cancelText, onConfirm) {
+  const backdrop = document.createElement("div");
+  backdrop.className = "confirm-backdrop";
+  backdrop.style = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9998;";
+
+  const box = document.createElement("div");
+  box.className = "confirm-box";
+  box.style = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a1a;padding:20px;border:1px solid #444;border-radius:10px;text-align:center;z-index:9999;color:white;box-shadow:0 0 20px rgba(0,255,255,0.3);";
+
+  box.innerHTML = `
+    <p>${msg}</p>
+    <button id="confirm-ok" style="margin:10px;background:rgba(0,255,255,0.2);border:1px solid cyan;border-radius:8px;padding:6px 12px;">${okText}</button>
+    <button id="confirm-cancel" style="margin:10px;background:rgba(255,0,0,0.2);border:1px solid red;border-radius:8px;padding:6px 12px;">${cancelText}</button>
+  `;
+
+  document.body.append(backdrop, box);
+  document.getElementById("confirm-ok").onclick = () => { onConfirm(); backdrop.remove(); box.remove(); };
+  document.getElementById("confirm-cancel").onclick = () => { backdrop.remove(); box.remove(); };
+}
+
+/* Load saved history on page load */
+history.forEach(item => renderGalleryItem(item, modalGallery));
+</script>
+
+
+</body>
+</html>

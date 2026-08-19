@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>NEON AIR HOCKEY</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+html{height:100%;height:-webkit-fill-available;}
+body{
+  width:100%;
+  min-height:100vh;
+  min-height:-webkit-fill-available;
+  background:#030509;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  overflow:hidden;font-family:'Orbitron',monospace;
+  user-select:none;-webkit-user-select:none;
+  touch-action:none;
+  -webkit-touch-callout:none;
+  padding: env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);
+}
+#hud{display:flex;align-items:center;gap:clamp(20px,8vw,40px);margin-bottom:8px;flex-shrink:0;}
+.sc{text-align:center}
+.sc-lbl{font-size:clamp(7px,2vw,9px);letter-spacing:4px;opacity:.4;margin-bottom:2px}
+.sc-num{font-size:clamp(28px,8vw,36px);font-weight:900;line-height:1}
+.you .sc-lbl,.you .sc-num{color:#00f5ff}
+.you .sc-num{text-shadow:0 0 12px #00f5ff,0 0 35px #00f5ff55}
+.bot .sc-lbl,.bot .sc-num{color:#ff2d78}
+.bot .sc-num{text-shadow:0 0 12px #ff2d78,0 0 35px #ff2d7855}
+.sep{font-size:clamp(16px,4vw,20px);color:#ffffff15;font-weight:900}
+#tilt{
+  flex-shrink:0;
+  filter:drop-shadow(0 28px 55px #000b) drop-shadow(0 0 25px #00f5ff14);
+}
+@media (min-width:600px) and (pointer:fine){
+  #tilt{
+    transform:perspective(1100px) rotateX(14deg);
+    transform-origin:50% 50%;
+  }
+}
+#wrap{position:relative;border-radius:14px;overflow:hidden;cursor:grab;touch-action:none;}
+#wrap.dragging{cursor:grabbing;}
+canvas{display:block;}
+#overlay{
+  position:fixed;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(3,5,9,.92);z-index:100;gap:12px;
+  backdrop-filter:blur(6px);
+}
+#overlay h1{
+  font-size:clamp(22px,7vw,40px);font-weight:900;letter-spacing:6px;
+  background:linear-gradient(115deg,#00f5ff,#ff2d78);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+#overlay .rules{
+  font-size:clamp(9px,2.5vw,11px);letter-spacing:2px;color:#ffffff35;
+  text-align:center;line-height:2.4;margin-top:4px;padding:0 24px;
+}
+#overlay .rules span{color:#ffe60099}
+#btn{
+  margin-top:16px;
+  padding:18px 56px;
+  font-family:'Orbitron',monospace;font-weight:700;
+  font-size:clamp(13px,3.5vw,15px);letter-spacing:5px;
+  background:transparent;border:2px solid #00f5ff;color:#00f5ff;
+  text-shadow:0 0 8px #00f5ff;box-shadow:0 0 20px #00f5ff55;
+  border-radius:6px;cursor:pointer;transition:all .15s;
+  /* Large touch target */
+  min-width:200px;min-height:56px;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+#btn:active{background:#00f5ff22;transform:scale(0.97);}
+#btn:hover{background:#00f5ff12;box-shadow:0 0 35px #00f5ffaa;}
+#flash{position:absolute;inset:0;pointer-events:none;z-index:19;opacity:0;transition:opacity .08s;border-radius:14px;}
+#notif{
+  position:absolute;top:12%;left:50%;transform:translateX(-50%);
+  font-size:11px;letter-spacing:4px;font-weight:700;
+  pointer-events:none;z-index:25;opacity:0;
+  transition:opacity .2s;white-space:nowrap;
+}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="sc bot"><div class="sc-lbl">BOT</div><div class="sc-num" id="sb">0</div></div>
+  <div class="sep">VS</div>
+  <div class="sc you"><div class="sc-lbl">YOU</div><div class="sc-num" id="sy">0</div></div>
+</div>
+<div id="tilt"><div id="wrap">
+  <canvas id="c"></canvas>
+  <div id="flash"></div>
+  <div id="notif"></div>
+</div></div>
+
+<div id="overlay">
+  <h1>AIR HOCKEY</h1>
+  <div class="rules">
+    DRAG YOUR PADDLE · HIT THE PUCK<br>
+    <span>5 SEC IN YOUR ZONE = OPPONENT SCORES</span><br>
+    <span>5 BOUNCES = PUCK ON FIRE 🔥</span>
+  </div>
+  <button id="btn">PLAY</button>
+</div>
+
+<script>
+// ═══════════════════ SETUP ═══════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const wrap   = document.getElementById('wrap');
+
+// Detect touch device
+const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+// Size table to fill the screen properly on both mobile and desktop
+// On mobile: use most of viewport width. On desktop: height-based.
+const VH = window.innerHeight;
+const VW = window.innerWidth;
+const HUD_H = 70; // approx HUD height
+
+let TH, TW;
+if(IS_TOUCH || VW < 600){
+  // Mobile: fit width, leave room for HUD
+  TW = Math.min(VW - 16, 420);
+  TH = Math.round(TW / 0.60);
+  // If that's too tall, shrink
+  if(TH > VH - HUD_H - 10){
+    TH = VH - HUD_H - 10;
+    TW = Math.round(TH * 0.60);
+  }
+} else {
+  // Desktop: height-based
+  TH = Math.min(560, VH - HUD_H - 20);
+  TW = Math.round(TH * 0.60);
+}
+
+canvas.width = TW; canvas.height = TH;
+wrap.style.width = TW+'px'; wrap.style.height = TH+'px';
+
+// ═══════════════════ CONSTANTS ═══════════════
+const WALL  = 12;
+const MR    = Math.round(TW * 0.076);
+const PR    = Math.round(TW * 0.046);
+const GW    = Math.round(TW * 0.40);
+const GL    = (TW-GW)/2, GR = (TW+GW)/2;
+const GNET  = 14;
+const HALF  = TH/2;
+
+const FRICTION    = 0.9982;   // near-frictionless air table
+const WALL_RES    = 0.88;     // wall bounce energy retention
+const HIT_RES     = 1.28;     // mallet hit restitution
+const MAX_SPEED   = 19;
+const ZONE_LIMIT  = 5 * 60;   // 5 seconds × 60fps
+const FIRE_BOUNCES= 5;
+
+// ═══════════════════ STATE ═══════════════════
+let running = false;
+let score   = {you:0, bot:0};
+let puck    = {x:TW/2, y:TH/2, vx:0, vy:0};
+let pm      = {x:TW/2, y:TH-MR-50, vx:0, vy:0};
+let bm      = {x:TW/2, y:MR+50,    vx:0, vy:0};
+let parts   = [];
+let drag    = {active:false, currX:0, currY:0};
+
+// Zone timer — counts frames puck stays in one half
+let zoneTimer   = 0;
+let puckInZone  = null; // 'top' or 'bottom' or null
+
+// Fire state
+let bounceCount = 0;  // total mallet bounces since last goal/fire reset
+let onFire      = false;
+let fireParticleTimer = 0;
+
+// Bot state machine
+const BOT = {
+  IDLE:    'idle',
+  DEFEND:  'defend',
+  ATTACK:  'attack',
+  RETREAT: 'retreat',
+};
+let botState    = BOT.IDLE;
+let botTarget   = {x: TW/2, y: MR+50};
+let botReactDelay = 0; // frames before bot reacts (makes it beatable)
+
+// ═══════════════════ COORDS ══════════════════
+function screenToCanvas(cx, cy){
+  const r = canvas.getBoundingClientRect();
+  return {
+    x:(cx-r.left)*(TW/r.width),
+    y:(cy-r.top)*(TH/r.height)
+  };
+}
+
+// ═══════════════════ DRAG ════════════════════
+function startDrag(cx,cy){
+  const p = screenToCanvas(cx,cy);
+  // On touch: grab anywhere in bottom half (generous — finger can't see mallet)
+  // On mouse: must be near the mallet
+  const grabRadius = IS_TOUCH ? TW : MR * 2.8;
+  if(Math.hypot(p.x-pm.x, p.y-pm.y) < grabRadius){
+    drag.active=true; drag.currX=p.x; drag.currY=p.y;
+    wrap.classList.add('dragging');
+  }
+}
+function moveDrag(cx,cy){
+  if(!drag.active)return;
+  const p=screenToCanvas(cx,cy);
+  drag.currX=p.x; drag.currY=p.y;
+}
+function endDrag(){ drag.active=false; wrap.classList.remove('dragging'); }
+
+canvas.addEventListener('mousedown',  e=>{ e.preventDefault(); startDrag(e.clientX,e.clientY); });
+document.addEventListener('mousemove', e=>moveDrag(e.clientX,e.clientY));
+document.addEventListener('mouseup',   ()=>endDrag());
+
+// Touch — attach to document so drag continues even if finger moves outside canvas
+document.addEventListener('touchstart', e=>{
+  // Never intercept taps on the overlay/button
+  if(e.target.closest('#overlay')) return;
+  const touch = e.touches[0];
+  const p = screenToCanvas(touch.clientX, touch.clientY);
+  if(p.y >= HALF - MR*2){
+    e.preventDefault();
+    startDrag(touch.clientX, touch.clientY);
+  }
+}, {passive:false});
+
+document.addEventListener('touchmove', e=>{
+  if(drag.active){
+    e.preventDefault();
+    moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+  }
+}, {passive:false});
+
+document.addEventListener('touchend',   ()=>endDrag());
+document.addEventListener('touchcancel',()=>endDrag());
+
+// ═══════════════════ PARTICLES ═══════════════
+function burst(x,y,col,n=40,fast=false){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, s=fast?3+Math.random()*9:1+Math.random()*5;
+    parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,decay:.018+Math.random()*.025,r:1.5+Math.random()*3.5,col,type:'normal'});
+  }
+}
+function fireTrail(x,y){
+  // flame particles shooting upward/behind
+  const speed = Math.hypot(puck.vx,puck.vy);
+  if(speed<0.5||Math.random()>.6) return;
+  const ang = Math.atan2(puck.vy,puck.vx)+Math.PI + (Math.random()-.5)*.8;
+  const s = 1+Math.random()*3;
+  const cols = ['#ff4400','#ff8800','#ffcc00','#ff2200'];
+  parts.push({
+    x:x+(Math.random()-.5)*PR, y:y+(Math.random()-.5)*PR,
+    vx:Math.cos(ang)*s, vy:Math.sin(ang)*s - 0.5,
+    life:1, decay:.04+Math.random()*.05, r:2+Math.random()*4,
+    col:cols[Math.floor(Math.random()*cols.length)], type:'fire'
+  });
+}
+function trail(x,y){
+  if(!onFire){
+    if(Math.random()>.6)return;
+    parts.push({x:x+(Math.random()-.5)*6,y:y+(Math.random()-.5)*6,
+      vx:(Math.random()-.5)*.5,vy:(Math.random()-.5)*.5,
+      life:.65,decay:.06+Math.random()*.04,r:.7+Math.random()*2,col:'#ffe600',type:'normal'});
+  } else {
+    fireTrail(x,y);
+  }
+}
+
+// ═══════════════════ NOTIFICATIONS ═══════════
+function notify(text,col){
+  const el=document.getElementById('notif');
+  el.textContent=text;
+  el.style.color=col;
+  el.style.textShadow=`0 0 12px ${col}`;
+  el.style.opacity='1';
+  setTimeout(()=>el.style.opacity='0',1400);
+}
+
+function flashScreen(col){
+  const el=document.getElementById('flash');
+  el.style.background=col+'22';
+  el.style.boxShadow=`inset 0 0 90px ${col}88`;
+  el.style.opacity='1';
+  setTimeout(()=>el.style.opacity='0',320);
+}
+
+// ═══════════════════ RESET ═══════════════════
+function resetRound(scoredSide){
+  // Launch puck toward whoever just conceded so they can fight back
+  // Always give a vertical component so it never purely bounces walls
+  const angle = (Math.random()-.5)*0.8;
+  const speed = 3.0 + Math.random()*1.5;
+  puck.x = TW/2 + (Math.random()-.5)*TW*.1;
+  puck.y = TH/2;
+  // If bot scored → send puck toward bot so player gets a fresh attack
+  // If player scored / zone → send toward player
+  const dir = (scoredSide==='bot') ? -1 : 1; // -1=up toward bot, 1=down toward player
+  puck.vx = Math.sin(angle)*speed;
+  puck.vy = dir * Math.cos(angle)*speed;
+  zoneTimer=0; puckInZone=null;
+  bounceCount=0; onFire=false;
+}
+
+// ═══════════════════ CIRCLE HIT ══════════════
+function circHit(ax,ay,ar,bx,by,br){
+  const dx=bx-ax,dy=by-ay,d=Math.hypot(dx,dy);
+  if(d>=ar+br||d<0.001)return null;
+  return{nx:dx/d,ny:dy/d,ov:(ar+br)-d};
+}
+
+function applyHit(hit,mvx,mvy,isMallet){
+  puck.x-=hit.nx*hit.ov;
+  puck.y-=hit.ny*hit.ov;
+  const rvx=puck.vx-mvx, rvy=puck.vy-mvy;
+  const dot=rvx*hit.nx+rvy*hit.ny;
+  if(dot<0){
+    puck.vx-=(1+HIT_RES)*dot*hit.nx;
+    puck.vy-=(1+HIT_RES)*dot*hit.ny;
+  }
+  puck.vx+=mvx*1.5;
+  puck.vy+=mvy*1.5;
+  // Minimum push so resting puck always moves
+  const sp=Math.hypot(puck.vx,puck.vy);
+  if(sp<4){
+    puck.vx+=hit.nx*-4;
+    puck.vy+=hit.ny*-4;
+  }
+  if(isMallet){
+    bounceCount++;
+    if(bounceCount>=FIRE_BOUNCES && !onFire){
+      onFire=true;
+      notify('🔥 PUCK ON FIRE!','#ff8800');
+      burst(puck.x,puck.y,'#ff4400',50,true);
+    }
+  }
+}
+
+// ═══════════════════ BOT AI ══════════════════
+// Two-phase attack:
+//   Phase 1 (WIND UP): bot moves to a position directly above the puck
+//   Phase 2 (STRIKE):  bot charges through the puck center downward
+// This guarantees contact and sends the puck toward the player goal.
+
+let botPhase    = 'idle';   // 'idle' | 'windup' | 'strike' | 'recover'
+let strikeTarget = {x:0, y:0};
+
+function updateBot(){
+  const BOT_MIN_Y  = WALL + MR + 4;
+  const BOT_MAX_Y  = HALF - MR - 4;
+  const BOT_SPD    = 5.8;
+  const puckInBotZone = puck.y < HALF;
+  const puckSpeed     = Math.hypot(puck.vx, puck.vy);
+  const distToPuck    = Math.hypot(bm.x - puck.x, bm.y - puck.y);
+
+  // ── Decide phase ──────────────────────────────
+  if(!puckInBotZone){
+    // Puck in player half — return to ready position
+    botPhase = 'recover';
+  } else if(botPhase === 'recover' || botPhase === 'idle'){
+    // Puck just entered bot zone — wind up
+    botPhase = 'windup';
+  } else if(botPhase === 'windup'){
+    // When lined up above puck (within ~1.5× mallet radius horizontally
+    // AND positioned above puck) → STRIKE
+    const alignedX = Math.abs(bm.x - puck.x) < MR * 1.5;
+    const abovePuck = bm.y < puck.y - MR * 0.5;
+    if(alignedX && abovePuck){
+      // Lock in strike target: puck center + overshoot downward
+      strikeTarget.x = puck.x;
+      strikeTarget.y = puck.y + MR * 2.5; // aim past puck center
+      strikeTarget.y = Math.min(BOT_MAX_Y, strikeTarget.y);
+      botPhase = 'strike';
+    }
+  } else if(botPhase === 'strike'){
+    // Strike complete when bot passed the puck or puck moved away fast
+    const pastPuck = bm.y > puck.y + MR;
+    const puckGone = puck.vy > 3; // puck flying toward player = success
+    if(pastPuck || puckGone){
+      botPhase = 'recover';
+    }
+  }
+
+  // ── Compute target per phase ──────────────────
+  let tx, ty, spd;
+
+  switch(botPhase){
+
+    case 'recover': {
+      // Float to center of bot half, track puck X loosely
+      tx  = TW/2 + (puck.x - TW/2) * 0.25;
+      ty  = HALF * 0.35;
+      spd = BOT_SPD;
+      break;
+    }
+
+    case 'windup': {
+      // Position directly above puck at distance (MR + PR + small gap)
+      // so when we charge we guarantee collision
+      const windupDist = MR + PR + 6;
+      tx  = puck.x + puck.vx * 5; // lead puck slightly
+      tx  = Math.max(WALL+MR, Math.min(TW-WALL-MR, tx));
+      ty  = puck.y - windupDist;
+      ty  = Math.max(BOT_MIN_Y, Math.min(BOT_MAX_Y - windupDist, ty));
+      spd = BOT_SPD * 1.1;
+      break;
+    }
+
+    case 'strike': {
+      // Charge straight to the locked strike target — full speed
+      tx  = strikeTarget.x;
+      ty  = strikeTarget.y;
+      spd = BOT_SPD * 2.2; // fast lunge
+      break;
+    }
+
+    default: {
+      tx  = TW/2;
+      ty  = HALF * 0.35;
+      spd = BOT_SPD;
+    }
+  }
+
+  // ── Move toward target ────────────────────────
+  const dx   = tx - bm.x;
+  const dy   = ty - bm.y;
+  const d    = Math.hypot(dx, dy) || 1;
+  const step = Math.min(spd, d);
+
+  const prevX = bm.x, prevY = bm.y;
+  bm.x += dx/d * step;
+  bm.y += dy/d * step;
+  bm.x = Math.max(WALL+MR, Math.min(TW-WALL-MR, bm.x));
+  bm.y = Math.max(BOT_MIN_Y, Math.min(BOT_MAX_Y,  bm.y));
+  bm.vx = bm.x - prevX;
+  bm.vy = bm.y - prevY;
+
+  // Update legacy botState for the indicator display
+  botState = botPhase === 'strike' ? BOT.ATTACK
+           : botPhase === 'windup' ? BOT.DEFEND
+           : BOT.IDLE;
+}
+
+// ═══════════════════ ZONE TIMER ══════════════
+function updateZoneTimer(){
+  const currentZone = puck.y < HALF ? 'top' : 'bottom';
+  if(currentZone===puckInZone){
+    zoneTimer++;
+    if(zoneTimer>=ZONE_LIMIT){
+      // Award point to opponent
+      if(currentZone==='top'){
+        // puck stuck in bot zone → bot gets point? No: 
+        // "puck in bot zone 5s → player scores"
+        score.you++;
+        document.getElementById('sy').textContent=score.you;
+        notify('⏱ ZONE PENALTY → YOU SCORE!','#00f5ff');
+        flashScreen('#00f5ff');
+      } else {
+        // puck stuck in player zone → bot scores
+        score.bot++;
+        document.getElementById('sb').textContent=score.bot;
+        notify('⏱ ZONE PENALTY → BOT SCORES!','#ff2d78');
+        flashScreen('#ff2d78');
+      }
+      burst(TW/2,TH/2,currentZone==='top'?'#00f5ff':'#ff2d78',60,true);
+      resetRound(currentZone==='top'?'you':'bot');
+    }
+  } else {
+    puckInZone=currentZone;
+    zoneTimer=0;
+  }
+}
+
+// Zone timer bar (drawn on canvas)
+function drawZoneBar(){
+  if(zoneTimer<30)return; // only show after 0.5s
+  const pct=zoneTimer/ZONE_LIMIT;
+  const barW=(TW-WALL*4)*pct;
+  const col=puck.y<HALF?'#ff2d78':'#00f5ff';
+  const barY=puck.y<HALF?WALL+4:TH-WALL-6;
+
+  ctx.save();
+  ctx.globalAlpha=0.25+pct*.35;
+  ctx.fillStyle=col;
+  ctx.fillRect(WALL*2, barY, (TW-WALL*4), 4);
+  ctx.globalAlpha=0.7+pct*.3;
+  glow(col,10);
+  ctx.fillStyle=col;
+  ctx.fillRect(WALL*2, barY, barW, 4);
+  ng();
+
+  if(pct>.7){
+    ctx.globalAlpha=.5+Math.sin(Date.now()*.015)*.4;
+    ctx.fillStyle=col;
+    ctx.font=`700 ${Math.round(TW*.022)}px Orbitron`;
+    ctx.textAlign='center';
+    const label=puck.y<HALF?'BOT ZONE — SHOOT!':'YOUR ZONE — CLEAR IT!';
+    ctx.fillText(label, TW/2, puck.y<HALF?WALL+22:TH-WALL-14);
+  }
+  ctx.restore();
+}
+
+// ═══════════════════ PHYSICS ═════════════════
+function physics(){
+  // ── Player mallet
+  const ppx=pm.x, ppy=pm.y;
+  if(drag.active){
+    const tx=Math.max(WALL+MR,Math.min(TW-WALL-MR,drag.currX));
+    const ty=Math.max(HALF+MR+4,Math.min(TH-WALL-MR,drag.currY));
+    pm.x=tx; pm.y=ty;
+  }
+  pm.vx=pm.x-ppx; pm.vy=pm.y-ppy;
+
+  // ── Bot
+  updateBot();
+
+  // ── Puck friction (very low = glides like air table)
+  puck.vx*=FRICTION;
+  puck.vy*=FRICTION;
+  if(Math.hypot(puck.vx,puck.vy)<0.035){ puck.vx=0; puck.vy=0; }
+
+  // ── Side walls
+  if(puck.x-PR<WALL){
+    puck.x=WALL+PR; puck.vx=Math.abs(puck.vx)*WALL_RES;
+    burst(puck.x,puck.y,'#ffffff33',7);
+  }
+  if(puck.x+PR>TW-WALL){
+    puck.x=TW-WALL-PR; puck.vx=-Math.abs(puck.vx)*WALL_RES;
+    burst(puck.x,puck.y,'#ffffff33',7);
+  }
+
+  // ── Top wall / bot goal
+  if(puck.y-PR<WALL){
+    if(puck.x>GL&&puck.x<GR){
+      score.you++;
+      document.getElementById('sy').textContent=score.you;
+      burst(TW/2,WALL+2,'#00f5ff',70,true);
+      flashScreen('#00f5ff');
+      notify('GOAL — YOU SCORE! 🏒','#00f5ff');
+      resetRound('you'); return;
+    }
+    puck.y=WALL+PR; puck.vy=Math.abs(puck.vy)*WALL_RES;
+    burst(puck.x,puck.y,'#ffffff22',7);
+  }
+
+  // ── Bottom wall / player goal
+  if(puck.y+PR>TH-WALL){
+    if(puck.x>GL&&puck.x<GR){
+      score.bot++;
+      document.getElementById('sb').textContent=score.bot;
+      burst(TW/2,TH-WALL-2,'#ff2d78',70,true);
+      flashScreen('#ff2d78');
+      notify('GOAL — BOT SCORES!','#ff2d78');
+      resetRound('bot'); return;
+    }
+    puck.y=TH-WALL-PR; puck.vy=-Math.abs(puck.vy)*WALL_RES;
+    burst(puck.x,puck.y,'#ffffff22',7);
+  }
+
+  // ── Puck vs player mallet
+  const ph=circHit(puck.x,puck.y,PR,pm.x,pm.y,MR);
+  if(ph){ applyHit(ph,pm.vx,pm.vy,true); burst(puck.x,puck.y,onFire?'#ff6600bb':'#ffe600bb',18); }
+
+  // ── Puck vs bot mallet
+  const bh=circHit(puck.x,puck.y,PR,bm.x,bm.y,MR);
+  if(bh){ applyHit(bh,bm.vx,bm.vy,true); burst(puck.x,puck.y,onFire?'#ff6600bb':'#ff2d78bb',18); }
+
+  // ── Speed cap
+  const sp=Math.hypot(puck.vx,puck.vy);
+  if(sp>MAX_SPEED){ puck.vx=puck.vx/sp*MAX_SPEED; puck.vy=puck.vy/sp*MAX_SPEED; }
+
+  puck.x+=puck.vx; puck.y+=puck.vy;
+
+  // ── Trail
+  if(sp>0.4) trail(puck.x,puck.y);
+
+  // ── Zone timer
+  updateZoneTimer();
+}
+
+// ═══════════════════ DRAW ════════════════════
+function glow(col,b){ ctx.shadowColor=col; ctx.shadowBlur=b; }
+function ng(){ ctx.shadowColor='transparent'; ctx.shadowBlur=0; }
+
+function drawTable(){
+  const bg=ctx.createRadialGradient(TW/2,TH*.35,20,TW/2,TH*.6,TH*.9);
+  bg.addColorStop(0,'#0e1a28'); bg.addColorStop(1,'#060810');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,TW,TH);
+
+  // grid
+  ctx.save(); ctx.globalAlpha=.025; ctx.strokeStyle='#00f5ff'; ctx.lineWidth=.55;
+  for(let x=WALL;x<=TW-WALL;x+=30){ ctx.beginPath();ctx.moveTo(x,WALL);ctx.lineTo(x,TH-WALL);ctx.stroke(); }
+  for(let y=WALL;y<=TH-WALL;y+=30){ ctx.beginPath();ctx.moveTo(WALL,y);ctx.lineTo(TW-WALL,y);ctx.stroke(); }
+  ctx.restore();
+
+  // zone tints
+  ctx.save(); ctx.globalAlpha=.03;
+  ctx.fillStyle='#ff2d78'; ctx.fillRect(WALL,WALL,TW-WALL*2,HALF-WALL);
+  ctx.fillStyle='#00f5ff'; ctx.fillRect(WALL,HALF,TW-WALL*2,HALF-WALL);
+  ctx.restore();
+
+  // border
+  glow('#00f5ff',16); ctx.strokeStyle='#00f5ff55'; ctx.lineWidth=2;
+  ctx.strokeRect(WALL*.5,WALL*.5,TW-WALL,TH-WALL); ng();
+
+  // center line
+  ctx.save(); ctx.setLineDash([7,10]);
+  glow('#00f5ff',4); ctx.strokeStyle='#00f5ff2a'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(WALL,HALF); ctx.lineTo(TW-WALL,HALF); ctx.stroke();
+  ctx.setLineDash([]); ng(); ctx.restore();
+
+  // center circle + dot
+  glow('#00f5ff',6); ctx.strokeStyle='#00f5ff1a'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(TW/2,HALF,TW*.11,0,Math.PI*2); ctx.stroke(); ng();
+  glow('#00f5ff',8); ctx.fillStyle='#00f5ff44';
+  ctx.beginPath(); ctx.arc(TW/2,HALF,3,0,Math.PI*2); ctx.fill(); ng();
+
+  drawGoal('top'); drawGoal('bot');
+}
+
+function drawGoal(side){
+  const col  = side==='top'?'#ff2d78':'#00f5ff';
+  const wallY= side==='top'?WALL:TH-WALL;
+  const netY = side==='top'?WALL+GNET:TH-WALL-GNET;
+
+  // net bg
+  ctx.save(); ctx.globalAlpha=.1; ctx.fillStyle=col;
+  ctx.fillRect(GL,Math.min(wallY,netY),GW,GNET); ctx.restore();
+
+  // net lines
+  ctx.save(); ctx.globalAlpha=.15; ctx.strokeStyle=col; ctx.lineWidth=.6;
+  for(let i=0;i<=5;i++){
+    const nx=GL+i*(GW/5);
+    ctx.beginPath();ctx.moveTo(nx,Math.min(wallY,netY));ctx.lineTo(nx,Math.max(wallY,netY));ctx.stroke();
+  }
+  for(let j=0;j<=2;j++){
+    const ny=Math.min(wallY,netY)+j*(GNET/2);
+    ctx.beginPath();ctx.moveTo(GL,ny);ctx.lineTo(GR,ny);ctx.stroke();
+  }
+  ctx.restore();
+
+  glow(col,20); ctx.strokeStyle=col; ctx.lineWidth=2.5;
+  ctx.beginPath();
+  ctx.moveTo(GL,wallY); ctx.lineTo(GL,netY);
+  ctx.lineTo(GR,netY);  ctx.lineTo(GR,wallY);
+  ctx.stroke(); ng();
+
+  glow(col,14); ctx.fillStyle=col;
+  [GL,GR].forEach(x=>{ ctx.beginPath();ctx.arc(x,wallY,4,0,Math.PI*2);ctx.fill(); }); ng();
+
+  ctx.save(); ctx.fillStyle=col+'88';
+  ctx.font=`700 ${Math.round(TW*.021)}px Orbitron`;
+  ctx.textAlign='center';
+  const ly=side==='top'?netY-3:netY+10;
+  ctx.fillText(side==='top'?'BOT':'YOU',TW/2,ly);
+  ctx.restore();
+}
+
+function drawMallet(x,y,col,active){
+  ctx.save(); ctx.globalAlpha=.18; ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(x+3,y+5,MR,MR*.45,0,0,Math.PI*2); ctx.fill(); ctx.restore();
+
+  glow(col,active?44:26); ctx.strokeStyle=col; ctx.lineWidth=active?3.5:2.5;
+  ctx.beginPath(); ctx.arc(x,y,MR,0,Math.PI*2); ctx.stroke();
+
+  const g=ctx.createRadialGradient(x-MR*.3,y-MR*.3,1,x,y,MR);
+  g.addColorStop(0,'#ffffff20'); g.addColorStop(.5,col+'40'); g.addColorStop(1,col+'08');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,MR,0,Math.PI*2); ctx.fill();
+
+  ng(); ctx.strokeStyle=col+'44'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(x,y,MR-7,0,Math.PI*2); ctx.stroke();
+
+  glow(col,12); ctx.fillStyle=col;
+  ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(x,y,2,0,Math.PI*2); ctx.fill(); ng();
+}
+
+function drawDragHint(){
+  if(drag.active) return;
+  const pulse = .15 + .1*Math.sin(Date.now()*.005);
+  // On touch show a bigger, more visible tap zone
+  if(IS_TOUCH){
+    ctx.save();
+    ctx.globalAlpha = pulse * .7;
+    ctx.strokeStyle = '#00f5ff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5,6]);
+    ctx.beginPath(); ctx.arc(pm.x, pm.y, MR+14, 0, Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    // "DRAG" label above mallet
+    ctx.globalAlpha = pulse * 1.2;
+    ctx.fillStyle = '#00f5ff';
+    ctx.font = `700 ${Math.round(TW*.026)}px Orbitron`;
+    ctx.textAlign = 'center';
+    ctx.fillText('DRAG', pm.x, pm.y - MR - 10);
+    ctx.restore();
+  } else {
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = '#00f5ff';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4,7]);
+    ctx.beginPath(); ctx.arc(pm.x, pm.y, MR+10, 0, Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+}
+
+function drawPuck(){
+  const sp=Math.hypot(puck.vx,puck.vy);
+  const col = onFire ? '#ff6600' : '#ffe600';
+  const glowCol = onFire ? '#ff4400' : '#ffe600';
+  const glowSize = onFire ? 50+Math.sin(Date.now()*.02)*12 : 36+sp*1.5;
+
+  // shadow
+  ctx.save(); ctx.globalAlpha=.28; ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(puck.x+2,puck.y+4,PR,PR*.44,0,0,Math.PI*2); ctx.fill(); ctx.restore();
+
+  glow(glowCol,glowSize); ctx.fillStyle=col+'cc';
+  ctx.beginPath(); ctx.arc(puck.x,puck.y,PR,0,Math.PI*2); ctx.fill();
+
+  if(onFire){
+    // inner hot core
+    glow('#ffffff',8); ctx.fillStyle='#ffff88';
+    ctx.beginPath(); ctx.arc(puck.x,puck.y,PR*.55,0,Math.PI*2); ctx.fill();
+  }
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.arc(puck.x,puck.y,PR*.32,0,Math.PI*2); ctx.fill(); ng();
+
+  // motion streaks
+  if(sp>1.5){
+    ctx.save(); ctx.globalAlpha=Math.min(.45,sp/MAX_SPEED*.85);
+    glow(glowCol,5); ctx.strokeStyle=col+'99'; ctx.lineWidth=1.6;
+    const ang=Math.atan2(puck.vy,puck.vx);
+    for(let i=-1;i<=1;i++){
+      ctx.beginPath();
+      ctx.moveTo(puck.x+Math.cos(ang+i*.25)*PR,puck.y+Math.sin(ang+i*.25)*PR);
+      ctx.lineTo(puck.x-Math.cos(ang)*sp*2.5,  puck.y-Math.sin(ang)*sp*2.5);
+      ctx.stroke();
+    }
+    ctx.restore(); ng();
+  }
+
+  // fire bounce counter badge
+  if(!onFire&&bounceCount>0){
+    const left=FIRE_BOUNCES-bounceCount;
+    ctx.save();
+    ctx.fillStyle='#ffe600cc';
+    ctx.font=`700 ${Math.round(TW*.024)}px Orbitron`;
+    ctx.textAlign='center';
+    ctx.globalAlpha=.7;
+    ctx.fillText(`${left}🔥`,puck.x,puck.y-PR-7);
+    ctx.restore();
+  }
+}
+
+function drawParticles(){
+  for(let i=parts.length-1;i>=0;i--){
+    const p=parts[i];
+    ctx.save(); ctx.globalAlpha=p.life*(p.type==='fire'?.75:.8);
+    glow(p.col,p.type==='fire'?14:8);
+    ctx.fillStyle=p.col;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r*Math.max(0,p.life),0,Math.PI*2); ctx.fill();
+    ng(); ctx.restore();
+    p.x+=p.vx; p.y+=p.vy;
+    if(p.type==='fire') p.vy-=.15; // fire rises
+    p.vx*=.91; p.vy*=p.type==='fire'?.95:.91;
+    p.life-=p.decay;
+    if(p.life<=0) parts.splice(i,1);
+  }
+}
+
+// Bot state indicator
+function drawBotState(){
+  const col = botState===BOT.ATTACK?'#ff2d78':botState===BOT.DEFEND?'#ffaa00':'#ffffff22';
+  const label = botState===BOT.ATTACK?'⚔':botState===BOT.DEFEND?'🛡':'·';
+  ctx.save();
+  ctx.fillStyle=col; ctx.globalAlpha=.55;
+  ctx.font=`${Math.round(TW*.036)}px serif`;
+  ctx.textAlign='center';
+  ctx.fillText(label, bm.x, bm.y-MR-8);
+  ctx.restore();
+}
+
+// ambient floaters
+const amb=[];
+for(let i=0;i<22;i++) amb.push({
+  x:Math.random()*TW,y:Math.random()*TH,
+  vx:(Math.random()-.5)*.2,vy:(Math.random()-.5)*.2,
+  r:.3+Math.random()*.8, col:Math.random()>.5?'#00f5ff':'#ff2d78', a:.04+Math.random()*.1
+});
+function drawAmb(){
+  for(const p of amb){
+    ctx.save();ctx.globalAlpha=p.a;glow(p.col,5);ctx.fillStyle=p.col;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();ng();ctx.restore();
+    p.x+=p.vx;p.y+=p.vy;
+    if(p.x<0)p.x=TW;if(p.x>TW)p.x=0;
+    if(p.y<0)p.y=TH;if(p.y>TH)p.y=0;
+  }
+}
+
+// ═══════════════════ LOOP ════════════════════
+function loop(){
+  if(!running)return;
+  requestAnimationFrame(loop);
+  ctx.clearRect(0,0,TW,TH);
+  physics();
+  drawTable();
+  drawAmb();
+  drawZoneBar();
+  drawParticles();
+  drawMallet(bm.x,bm.y,'#ff2d78',false);
+  drawMallet(pm.x,pm.y,'#00f5ff',drag.active);
+  drawBotState();
+  drawDragHint();
+  drawPuck();
+}
+
+document.getElementById('btn').addEventListener('click',()=>{
+  document.getElementById('overlay').style.display='none';
+  score={you:0,bot:0};
+  document.getElementById('sy').textContent='0';
+  document.getElementById('sb').textContent='0';
+  resetRound('bot'); // first serve goes toward bot
+  running=true;
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>

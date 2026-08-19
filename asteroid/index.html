@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matter-Pixi Asteroid Shooter</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        canvas { display: block; } /* Ensures the canvas fills the viewport properly */
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.x/dist/pixi.min.js"></script>
+</head>
+<body>
+    <script>
+        // Aliases for Matter.js modules
+        const { Engine, Runner, World, Bodies, Body } = Matter;
+
+        // --- Configuration ---
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const engine = Engine.create();
+        const world = engine.world;
+        world.gravity.y = 0; 
+
+        // --- Pixi.js Setup (Rendering) ---
+        const app = new PIXI.Application({ 
+            width: width, 
+            height: height, 
+            backgroundColor: 0x000000 
+        });
+        document.body.appendChild(app.view);
+
+        // --- Matter.js Setup (Physics) ---
+        const runner = Runner.create();
+        Runner.run(runner, engine);
+
+        // A simple structure to hold our physical bodies and visual sprites
+        const gameObjects = [];
+
+        // --- Game Loop (The crucial link between Physics and Rendering) ---
+        app.ticker.add(() => {
+            updateSprites();
+        });
+
+        // --- Walls (Static Boundaries) ---
+        const wallOptions = { 
+            isStatic: true, 
+            restitution: 1,
+            friction: 0 
+        };
+
+        World.add(world, [
+            // Top, Bottom, Left, Right
+            Bodies.rectangle(width / 2, -50, width, 100, wallOptions),
+            Bodies.rectangle(width / 2, height + 50, width, 100, wallOptions),
+            Bodies.rectangle(-50, height / 2, 100, height, wallOptions),
+            Bodies.rectangle(width + 50, height / 2, 100, height, wallOptions)
+        ]);
+
+        // --- SHIP AND ASTEROID CONSTANTS (Moved Up) ---
+        const SHIP_WIDTH = 50;
+        const SHIP_HEIGHT = 50;
+        const THRUST_FORCE = 0.0005;
+        const ROTATION_SPEED = 0.05;
+        let playerShip;
+
+        // Object to track which keys are currently held down
+        const keys = {};
+
+        // --- FUNCTION DEFINITIONS (Moved Up) ---
+
+        /**
+         * Iterates through all game objects and updates their Pixi sprite 
+         * to match the position and rotation of their Matter body.
+         */
+        function updateSprites() {
+            for (const obj of gameObjects) {
+                if (obj.body && obj.sprite) {
+                    obj.sprite.x = obj.body.position.x;
+                    obj.sprite.y = obj.body.position.y;
+                    obj.sprite.rotation = obj.body.angle; 
+                }
+            }
+        }
+
+        /**
+         * Creates the player ship.
+         */
+        function createShip() {
+            const body = Bodies.polygon(width / 2, height / 2, 3, SHIP_WIDTH / 2, {
+                inertia: Infinity,
+                restitution: 0.5,
+                friction: 0.1,
+                frictionAir: 0.02,
+                label: 'ship'
+            });
+
+            const sprite = PIXI.Sprite.from(PIXI.Texture.WHITE);
+            sprite.width = SHIP_WIDTH;
+            sprite.height = SHIP_HEIGHT;
+            sprite.anchor.set(0.5);
+
+            World.add(world, body);
+            playerShip = { body, sprite };
+            gameObjects.push(playerShip);
+            app.stage.addChild(sprite); 
+        }
+
+
+        /**
+         * Creates an asteroid.
+         */
+        function createAsteroid(x, y, radius) {
+            const body = Bodies.circle(x, y, radius, {
+                restitution: 0.9,
+                friction: 0,
+                density: 0.001,
+                label: 'asteroid'
+            });
+
+            Body.setVelocity(body, { 
+                x: (Math.random() - 0.5) * 5, 
+                y: (Math.random() - 0.5) * 5 
+            });
+
+            const sprite = new PIXI.Graphics();
+            sprite.beginFill(0x888888);
+            sprite.drawCircle(0, 0, radius);
+            sprite.endFill();
+            sprite.x = x;
+            sprite.y = y;
+            sprite.pivot.set(0, 0);
+
+            const asteroid = { body, sprite };
+            gameObjects.push(asteroid);
+            World.add(world, body);
+            app.stage.addChild(sprite);
+        }
+
+        /**
+         * Sets up event listeners for key presses to control the ship.
+         */
+        function handleInput() {
+            document.addEventListener('keydown', (e) => {
+                keys[e.key] = true;
+            });
+            document.addEventListener('keyup', (e) => {
+                keys[e.key] = false;
+            });
+
+            // Add the input processing to the Pixi ticker (the main game loop)
+            app.ticker.add(processMovement);
+        }
+
+        /**
+         * Applies forces and rotation based on the currently pressed keys.
+         */
+        function processMovement() {
+            if (!playerShip) return;
+
+            const shipBody = playerShip.body;
+            
+            // --- 1. Rotation ---
+            if (keys['ArrowLeft'] || keys['a']) {
+                Body.setAngularVelocity(shipBody, -ROTATION_SPEED);
+            } else if (keys['ArrowRight'] || keys['d']) {
+                Body.setAngularVelocity(shipBody, ROTATION_SPEED);
+            } else {
+                Body.setAngularVelocity(shipBody, 0);
+            }
+
+            // --- 2. Thrust ---
+            if (keys['ArrowUp'] || keys['w']) {
+                const angle = shipBody.angle;
+                const forwardAngle = angle - Math.PI / 2; 
+
+                const force = {
+                    x: Math.cos(forwardAngle) * THRUST_FORCE,
+                    y: Math.sin(forwardAngle) * THRUST_FORCE
+                };
+                Body.applyForce(shipBody, shipBody.position, force);
+            }
+        }
+        
+        // --- START GAME EXECUTION ---
+        createShip();
+        handleInput();
+
+        // Add a starting asteroid
+        createAsteroid(width * 0.75, height * 0.25, 30);
+        createAsteroid(width * 0.25, height * 0.75, 50);
+
+    </script>
+</body>
+</html>

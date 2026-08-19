@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bottle Flip Game</title>
+<style>
+html,body{margin:0;padding:0;overflow:hidden;background:#222;color:white;font-family:sans-serif;}
+#score {position:absolute;top:20px;left:20px;font-size:24px;}
+</style>
+</head>
+<body>
+<div id="score">Points: 0</div>
+<script src="../pixi.min.js"></script>
+<script src="../matter.min.js"></script>
+<script>
+const { Engine, World, Bodies, Body, Runner } = Matter;
+
+// PIXI setup
+const app = new PIXI.Application({ width: window.innerWidth, height: window.innerHeight, backgroundColor: 0x222222 });
+document.body.appendChild(app.view);
+
+// Matter.js setup
+let engine = Engine.create();
+let world = engine.world;
+
+// Ground
+const groundHeight = 50;
+const ground = Bodies.rectangle(window.innerWidth/2, window.innerHeight - groundHeight/2, window.innerWidth, groundHeight, { isStatic:true });
+World.add(world, ground);
+
+// Draw ground
+const groundGfx = new PIXI.Graphics();
+groundGfx.beginFill(0x444444);
+groundGfx.drawRect(-window.innerWidth/2, -groundHeight/2, window.innerWidth, groundHeight);
+groundGfx.endFill();
+groundGfx.x = window.innerWidth/2;
+groundGfx.y = window.innerHeight - groundHeight/2;
+app.stage.addChild(groundGfx);
+
+// Game variables
+let points = 0;
+let flips = 0;
+let airborne = false;
+let holding = false;
+let holdStart = 0;
+let canSpinMidAir = false;
+let hasSettled = false;
+let uprightThreshold = 0.2; // ~11 degrees
+
+// Create bottle
+const bottleWidth = 40, bottleHeight = 100;
+let bottle, bottleGfx;
+
+function createBottle() {
+    bottle = Bodies.rectangle(window.innerWidth/2, window.innerHeight - groundHeight - bottleHeight/2, bottleWidth, bottleHeight, {
+        restitution: 0.1,
+        friction: 0.5,
+        frictionAir: 0.02,
+        density: 0.002
+    });
+    World.add(world, bottle);
+
+    // Bottle graphics
+    function createBottleGraphics() {
+        const g = new PIXI.Graphics();
+        g.beginFill(0x4c4c4c);
+        g.drawRoundedRect(-bottleWidth/2, -bottleHeight/2 + 20, bottleWidth, bottleHeight - 20, 10);
+        g.drawRect(-bottleWidth/4, -bottleHeight/2, bottleWidth/2, 20);
+        g.endFill();
+        return g;
+    }
+    bottleGfx = createBottleGraphics();
+    app.stage.addChild(bottleGfx);
+}
+createBottle();
+
+// Glow effect
+const glow = new PIXI.Graphics();
+glow.beginFill(0x00ccff, 0.4);
+glow.drawCircle(0, 0, 30);
+glow.endFill();
+glow.visible = false;
+app.stage.addChild(glow);
+
+// Keyboard rotation
+let rotateLeft = false;
+let rotateRight = false;
+window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') rotateLeft = true;
+    if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') rotateRight = true;
+});
+window.addEventListener('keyup', e => {
+    if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') rotateLeft = false;
+    if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') rotateRight = false;
+});
+
+// Mouse / touch input
+app.view.addEventListener('pointerdown', (e) => {
+    if (hasSettled) {
+        // Reset game
+        resetGame();
+        return;
+    }
+
+    const isOnGround = bottle.position.y >= window.innerHeight - groundHeight - bottleHeight/2 - 2 && Math.abs(bottle.velocity.y) < 1;
+    if (e.button === 0) {
+        if (isOnGround) {
+            holding = true;
+            holdStart = performance.now();
+            glow.visible = true;
+        } else if (airborne && canSpinMidAir) {
+            const spinPower = 0.1 + Math.random() * 0.1;
+            Body.setAngularVelocity(bottle, bottle.angularVelocity + spinPower);
+        }
+    }
+});
+
+app.view.addEventListener('pointerup', (e) => {
+    if (e.button === 0 && holding && !hasSettled) {
+        holding = false;
+        const holdTime = performance.now() - holdStart;
+        const jumpPower = Math.min(holdTime / 1000, 1.5);
+        Body.setVelocity(bottle, { x: 0, y: -15 * jumpPower });
+
+        glow.visible = false;
+        airborne = true;
+        canSpinMidAir = true;
+    }
+});
+
+// Prevent context menu
+window.addEventListener('contextmenu', e => e.preventDefault());
+
+// Physics runner
+const runner = Runner.create();
+Runner.run(runner, engine);
+
+// Shatter function
+function shatterBottle(bottle) {
+    World.remove(world, bottle);
+    app.stage.removeChild(bottleGfx);
+
+    const shardCount = 8;
+    const shardWidth = 10;
+    const shardHeight = 20;
+
+    for (let i = 0; i < shardCount; i++) {
+        const shard = Bodies.rectangle(
+            bottle.position.x,
+            bottle.position.y,
+            shardWidth,
+            shardHeight,
+            {
+                restitution: 0.2,
+                friction: 0.5,
+                frictionAir: 0.05,
+                density: 0.001
+            }
+        );
+        Body.setVelocity(shard, {
+            x: (Math.random() - 0.5) * 15,
+            y: -Math.random() * 10
+        });
+        Body.setAngularVelocity(shard, (Math.random() - 0.5) * 5);
+        World.add(world, shard);
+
+        const shardGfx = new PIXI.Graphics();
+        shardGfx.beginFill(0x4c4c4c);
+        shardGfx.drawRect(-shardWidth / 2, -shardHeight / 2, shardWidth, shardHeight);
+        shardGfx.endFill();
+        shardGfx.shardBody = shard;
+        app.stage.addChild(shardGfx);
+    }
+}
+
+// Reset function
+function resetGame() {
+    // Remove old shards
+    app.stage.children.forEach(child => {
+        if (child.shardBody) {
+            World.remove(world, child.shardBody);
+            app.stage.removeChild(child);
+        }
+    });
+    hasSettled = false;
+    flips = 0;
+    updateScore();
+    createBottle();
+}
+
+// Score update
+function updateScore() {
+    document.getElementById('score').textContent = `Points: ${points}`;
+}
+
+// Render loop
+app.ticker.add(() => {
+    if (!bottle) return;
+
+    const isOnGround = bottle.position.y >= window.innerHeight - groundHeight - bottleHeight/2 - 2 && Math.abs(bottle.velocity.y) < 1;
+
+    if (airborne && isOnGround && !hasSettled) {
+        airborne = false;
+        canSpinMidAir = false;
+
+        // Count flips
+        const fullRotations = Math.floor(Math.abs(bottle.angle) / (2 * Math.PI));
+        flips = fullRotations;
+        points += flips; // add points for flips
+
+        if (Math.abs(bottle.angle % (2 * Math.PI)) < uprightThreshold || Math.abs(bottle.angle % (2 * Math.PI) - 2 * Math.PI) < uprightThreshold) {
+            points += 5; // bonus for perfect landing
+            hasSettled = false; // still jumpable
+        } else {
+            hasSettled = true;
+            shatterBottle(bottle);
+        }
+        updateScore();
+    }
+
+    if (airborne && !hasSettled) {
+        if (rotateLeft) Body.setAngularVelocity(bottle, bottle.angularVelocity - 0.01);
+        if (rotateRight) Body.setAngularVelocity(bottle, bottle.angularVelocity + 0.01);
+    }
+
+    if (holding && !airborne && !hasSettled) {
+        const chargeTime = (performance.now() - holdStart) / 1000;
+        const glowPower = Math.min(chargeTime, 1.5);
+        glow.clear();
+        glow.beginFill(0x00ccff, 0.3 + 0.3 * glowPower);
+        glow.drawCircle(0, 0, 30 + 40 * glowPower);
+        glow.endFill();
+        glow.x = bottle.position.x;
+        glow.y = bottle.position.y + bottleHeight/2 + 10;
+    }
+
+    if (!hasSettled && bottleGfx) {
+        bottleGfx.x = bottle.position.x;
+        bottleGfx.y = bottle.position.y;
+        bottleGfx.rotation = bottle.angle;
+    }
+
+    // Update shards graphics
+    app.stage.children.forEach(child => {
+        if (child.shardBody) {
+            child.x = child.shardBody.position.x;
+            child.y = child.shardBody.position.y;
+            child.rotation = child.shardBody.angle;
+        }
+    });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ZeroShift</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { overflow:hidden; background:#04040d; display:flex; align-items:center; justify-content:center; height:100vh; font-family:'Orbitron','Courier New',monospace; }
+  #game-wrap { position:relative; display:inline-block; }
+  #ui { position:absolute; top:0; left:0; right:0; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; pointer-events:none; z-index:10; }
+  #title { font-size:16px; font-weight:900; letter-spacing:6px; color:#fff; text-shadow: 0 0 8px #00e5ff, 0 0 20px #00e5ff88; }
+  #controls { font-size:9px; letter-spacing:2px; color:#ffffff44; text-align:right; line-height:1.8; }
+  #controls span { color:#ffd70088; }
+
+  #start-screen {
+    position:absolute; top:0; left:0; right:0; bottom:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:30; background:rgba(4,4,13,0.95);
+    font-family:'Orbitron','Courier New',monospace; padding:20px 0 12px;
+  }
+  #start-screen h1 { font-size:44px; font-weight:900; letter-spacing:10px; color:#fff; text-shadow:0 0 30px #00e5ff, 0 0 60px #00e5ff66; margin-bottom:4px; flex-shrink:0; }
+  #start-tagline { font-size:10px; letter-spacing:5px; color:#ffffff44; margin-bottom:16px; flex-shrink:0; }
+
+  #event-selector { display:flex; flex-direction:column; align-items:center; gap:10px; width:100%; flex-shrink:0; }
+  #selector-toolbar { display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; }
+  .toolbar-btn { font-family:inherit; font-size:8px; letter-spacing:3px; padding:5px 14px; cursor:pointer; background:transparent; border:1px solid; outline:none; transition:all 0.15s; }
+  .toolbar-btn.all { color:#00e5ff88; border-color:#00e5ff44; }
+  .toolbar-btn.all:hover { color:#00e5ff; border-color:#00e5ff; background:#00e5ff11; }
+  .toolbar-btn.none { color:#ff444488; border-color:#ff444444; }
+  .toolbar-btn.none:hover { color:#ff4444; border-color:#ff4444; background:#ff444411; }
+  .toolbar-btn.rand { color:#ffd70088; border-color:#ffd70044; }
+  .toolbar-btn.rand:hover { color:#ffd700; border-color:#ffd700; background:#ffd70011; }
+  #sel-count { font-size:9px; letter-spacing:3px; color:#ffffff33; min-width:80px; text-align:center; }
+  #sel-count span { color:#ffd700; }
+
+  #event-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:5px; padding:0 16px; width:100%; }
+  .ev-card { padding:6px 8px; cursor:pointer; user-select:none; border:1px solid transparent; border-left:3px solid; background:#ffffff04; transition:all 0.15s; display:flex; align-items:center; gap:6px; position:relative; overflow:hidden; }
+  .ev-card:hover { background:#ffffff0a; }
+  .ev-card.selected { background:#ffffff0d; }
+  .ev-card.selected::after { content:'✓'; position:absolute; right:6px; top:50%; transform:translateY(-50%); font-size:9px; opacity:0.7; }
+  .ev-card:not(.selected) { opacity:0.35; }
+  .ev-card:not(.selected):hover { opacity:0.6; }
+  .ev-num { font-size:8px; color:#ffffff22; min-width:14px; flex-shrink:0; }
+  .ev-name { font-size:8px; letter-spacing:1px; line-height:1.3; }
+
+  #start-row { display:flex; gap:12px; align-items:center; flex-shrink:0; margin-top:8px; }
+  #start-btn { font-family:inherit; font-size:12px; letter-spacing:6px; font-weight:700; padding:11px 36px; cursor:pointer; background:transparent; color:#00e5ff; border:2px solid #00e5ff; outline:none; text-shadow:0 0 12px #00e5ff; box-shadow:0 0 20px #00e5ff44; transition:all 0.2s; }
+  #start-btn:hover:not(:disabled) { background:#00e5ff22; box-shadow:0 0 40px #00e5ff88; }
+  #start-btn:disabled { opacity:0.3; cursor:not-allowed; }
+  #shuffle-order-toggle { font-family:inherit; font-size:8px; letter-spacing:2px; padding:8px 14px; cursor:pointer; background:transparent; color:#ffd70066; border:1px solid #ffd70033; outline:none; transition:all 0.15s; }
+  #shuffle-order-toggle:hover { color:#ffd700; border-color:#ffd700; background:#ffd70011; }
+  #shuffle-order-toggle.active { color:#ffd700; border-color:#ffd700; background:#ffd70018; }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <div id="ui">
+    <div id="title">ZERO SHIFT</div>
+    <div id="controls">
+      <span>A/D / ←→</span> MOVE &nbsp; <span>W/↑/SPACE</span> JUMP
+    </div>
+  </div>
+  <div id="start-screen">
+    <h1>ZERO SHIFT</h1>
+    <div id="start-tagline">◆ COLLECT THE DIAMOND TO ADVANCE</div>
+    <div id="event-selector">
+      <div id="selector-toolbar">
+        <button class="toolbar-btn all" id="btn-all">SELECT ALL</button>
+        <button class="toolbar-btn none" id="btn-none">DESELECT ALL</button>
+        <button class="toolbar-btn rand" id="btn-rand">RANDOM PICK</button>
+        <div id="sel-count"><span id="sel-num">20</span> / 20 EVENTS</div>
+      </div>
+      <div id="event-grid"></div>
+    </div>
+    <div id="start-row">
+      <button id="shuffle-order-toggle" class="active">⇄ SHUFFLE ORDER</button>
+      <button id="start-btn">▶ PLAY</button>
+    </div>
+  </div>
+</div>
+
+<script src="pixi.min.js"></script>
+<script>const Events = {};</script>
+<script src="events/key-shuffle.js"></script>
+<script src="events/event-01-bullet-shower.js"></script>
+<script src="events/event-02-laser-fever.js"></script>
+<script src="events/event-03-gravity-flip.js"></script>
+<script src="events/event-04-mine-field.js"></script>
+<script src="events/event-05-wall-crushers.js"></script>
+<script src="events/event-06-spike-rain.js"></script>
+<script src="events/event-07-blackout.js"></script>
+<script src="events/event-08-homing-missiles.js"></script>
+<script src="events/event-09-to-14.js"></script>
+<script src="events/event-15-to-20.js"></script>
+<script src="events/event-manager.js"></script>
+
+<script>
+// ═══════════════════════════════════════════
+//  ZERO SHIFT — Main Game
+// ═══════════════════════════════════════════
+const W = 900, H = 560;
+const app = new PIXI.Application({ width:W, height:H, backgroundColor:0x04040d, antialias:true });
+document.getElementById('game-wrap').appendChild(app.view);
+
+const GRAVITY_BASE = 0.55;
+const FLOOR_Y = H - 20;
+const PW = 18, PH = 24;
+
+// Shared mutable game state
+const gameState = { gravityDir:1, shakeX:0, shakeY:0, iceMode:false, spawnOverride:null };
+
+// ── Event metadata ──────────────────────────────────────────
+const EVENT_META = [
+  {id:1,name:'BULLET SHOWER',color:'#ff4444'},{id:2,name:'LASER FEVER',color:'#00ff88'},
+  {id:3,name:'GRAVITY FLIP',color:'#aa44ff'},{id:4,name:'MINE FIELD',color:'#ffaa00'},
+  {id:5,name:'ICE AGE',color:'#88ddff'},{id:6,name:'SPIKE RAIN',color:'#ff6600'},
+  {id:7,name:'BLACKOUT',color:'#4488ff'},{id:8,name:'HOMING MISSILES',color:'#ff0066'},
+  {id:9,name:'SPIN BLADES',color:'#ffdd00'},{id:10,name:'FLOOR IS LAVA',color:'#ff4400'},
+  {id:11,name:'SHOCKWAVE',color:'#00ffcc'},{id:12,name:'METEOR STRIKE',color:'#ff8833'},
+  {id:13,name:'LIGHTNING STORM',color:'#eeff00'},{id:14,name:'SPIRAL ATTACK',color:'#ff44cc'},
+  {id:15,name:'CLONE MIRRORS',color:'#88ffff'},{id:16,name:'LASER GRID',color:'#ff4400'},
+  {id:17,name:'DISCO DEATH',color:'#ff00aa'},{id:18,name:'VOID CRUSH',color:'#6600ff'},
+  {id:19,name:'EARTHQUAKE',color:'#cc8833'},{id:20,name:'ZERO HOUR',color:'#ff0000'},
+];
+
+// ── Event grid UI ───────────────────────────────────────────
+const selected = new Set(EVENT_META.map(e => e.id));
+let shuffleOrder = true;
+const cards = {};
+
+const grid = document.getElementById('event-grid');
+EVENT_META.forEach(ev => {
+  const card = document.createElement('div');
+  card.className = 'ev-card selected';
+  card.style.borderLeftColor = ev.color;
+  card.style.color = ev.color;
+  card.innerHTML = `<span class="ev-num">${String(ev.id).padStart(2,'0')}</span><span class="ev-name">${ev.name}</span>`;
+  card.addEventListener('click', () => {
+    if (selected.has(ev.id)) { selected.delete(ev.id); card.classList.remove('selected'); }
+    else { selected.add(ev.id); card.classList.add('selected'); }
+    updateCount();
+  });
+  grid.appendChild(card); cards[ev.id] = card;
+});
+
+function updateCount() {
+  document.getElementById('sel-num').textContent = selected.size;
+  document.getElementById('start-btn').disabled = selected.size === 0;
+}
+
+document.getElementById('btn-all').addEventListener('click', () => {
+  EVENT_META.forEach(ev => { selected.add(ev.id); cards[ev.id].classList.add('selected'); });
+  updateCount();
+});
+document.getElementById('btn-none').addEventListener('click', () => {
+  selected.clear(); Object.values(cards).forEach(c => c.classList.remove('selected')); updateCount();
+});
+document.getElementById('btn-rand').addEventListener('click', () => {
+  selected.clear(); Object.values(cards).forEach(c => c.classList.remove('selected'));
+  const count = 3 + Math.floor(Math.random() * 8);
+  const pool = [...EVENT_META].sort(() => Math.random()-.5).slice(0, count);
+  pool.forEach(ev => { selected.add(ev.id); cards[ev.id].classList.add('selected'); });
+  updateCount();
+});
+
+const shuffleBtn = document.getElementById('shuffle-order-toggle');
+shuffleBtn.addEventListener('click', () => {
+  shuffleOrder = !shuffleOrder;
+  shuffleBtn.classList.toggle('active', shuffleOrder);
+  shuffleBtn.textContent = shuffleOrder ? '⇄ SHUFFLE ORDER' : '→ IN ORDER';
+});
+
+function buildPlayOrder() {
+  let ids = [...selected];
+  if (shuffleOrder) { for (let i=ids.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ids[i],ids[j]]=[ids[j],ids[i]];} }
+  else ids.sort((a,b) => a-b);
+  return ids;
+}
+
+// ── PixiJS Scene ────────────────────────────────────────────
+const bgLayer = new PIXI.Graphics();
+bgLayer.lineStyle(1,0x0d1a33,.5);
+for(let x=0;x<=W;x+=40){bgLayer.moveTo(x,0);bgLayer.lineTo(x,H);}
+for(let y=0;y<=H;y+=40){bgLayer.moveTo(0,y);bgLayer.lineTo(W,y);}
+app.stage.addChild(bgLayer);
+
+const floorGfx = new PIXI.Graphics();
+floorGfx.beginFill(0x0a0a2a,1); floorGfx.drawRect(0,FLOOR_Y,W,H-FLOOR_Y); floorGfx.endFill();
+floorGfx.lineStyle(2,0x7788ff,1); floorGfx.moveTo(0,FLOOR_Y); floorGfx.lineTo(W,FLOOR_Y);
+app.stage.addChild(floorGfx);
+
+function makePlatform(x,y,w,h) {
+  const cont=new PIXI.Container();
+  const g=new PIXI.Graphics();
+  g.beginFill(0x334dff,.12); g.drawRect(-4,2,w+8,h+6); g.endFill();
+  g.beginFill(0x1a2060,1); g.drawRect(0,0,w,h); g.endFill();
+  g.beginFill(0x2233aa,.7); g.drawRect(0,0,w,Math.ceil(h/2)); g.endFill();
+  g.lineStyle(2,0x00e5ff,1); g.moveTo(0,0); g.lineTo(w,0);
+  g.lineStyle(1,0x5566ff,.5); g.moveTo(0,0); g.lineTo(0,h); g.moveTo(w,0); g.lineTo(w,h);
+  cont.addChild(g); cont.x=x; cont.y=y; cont.pw=w; cont.ph=h;
+  app.stage.addChild(cont); return cont;
+}
+
+const platformData = [
+  {x:60,y:430,w:130,h:12},{x:270,y:370,w:130,h:12},{x:500,y:370,w:130,h:12},
+  {x:710,y:430,w:130,h:12},{x:160,y:290,w:120,h:12},{x:390,y:265,w:120,h:12},
+  {x:620,y:290,w:120,h:12},{x:80,y:185,w:110,h:12},{x:710,y:185,w:110,h:12},
+  {x:350,y:152,w:200,h:12},{x:350,y:72,w:200,h:12},
+];
+const platforms = platformData.map(p => makePlatform(p.x,p.y,p.w,p.h));
+
+const eventLayer   = new PIXI.Graphics();
+const diamondLayer = new PIXI.Graphics();
+app.stage.addChild(eventLayer);
+
+// ── Player ──────────────────────────────────────────────────
+const playerCont = new PIXI.Container();
+const playerGlow = new PIXI.Graphics();
+playerGlow.beginFill(0x00e5ff,.1); playerGlow.drawRect(-6,-4,PW+12,PH+8); playerGlow.endFill();
+const playerBody = new PIXI.Graphics();
+playerBody.beginFill(0x001a26,1); playerBody.drawRect(0,0,PW,PH); playerBody.endFill();
+playerBody.beginFill(0x00e5ff,.25); playerBody.drawRect(2,2,PW-4,Math.floor(PH*.45)); playerBody.endFill();
+playerBody.lineStyle(2,0x00e5ff,1); playerBody.drawRect(0,0,PW,PH);
+playerBody.beginFill(0x00e5ff,.6); playerBody.drawRect(4,6,PW-8,5); playerBody.endFill();
+playerCont.addChild(playerGlow); playerCont.addChild(playerBody);
+playerCont.x=90; playerCont.y=FLOOR_Y-PH-2;
+playerCont.vx=0; playerCont.vy=0; playerCont.onGround=false;
+playerCont.PW=PW; playerCont.PH=PH;
+app.stage.addChild(playerCont);
+app.stage.addChild(diamondLayer); // diamond above player slightly
+
+// ── Particles ───────────────────────────────────────────────
+const particles = [];
+const particleLayer = new PIXI.Graphics();
+app.stage.addChild(particleLayer);
+
+function spawnParticle() {
+  if(!playerCont.onGround && Math.random()<.3)
+    particles.push({x:playerCont.x+PW/2+(Math.random()-.5)*6, y:playerCont.y+PH,
+      vx:(Math.random()-.5)*1.2, vy:Math.random()*1.5+.5, life:1, r:Math.random()*3+1});
+}
+function updateParticles() {
+  particleLayer.clear();
+  for(let i=particles.length-1;i>=0;i--) {
+    const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.life-=.06;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    particleLayer.beginFill(0x00e5ff,p.life*.8); particleLayer.drawCircle(p.x,p.y,p.r*p.life); particleLayer.endFill();
+  }
+}
+
+const scanlines = new PIXI.Graphics();
+for(let y=0;y<H;y+=4){scanlines.lineStyle(1,0x000000,.15);scanlines.moveTo(0,y);scanlines.lineTo(W,y);}
+app.stage.addChild(scanlines);
+
+// ── Input — completely rebuilt to avoid stuck keys ──────────
+const keys = new Set(); // use Set, not object, for cleaner state
+window.addEventListener('keydown', e => {
+  keys.add(e.key.toLowerCase());
+  if(e.key===' ') e.preventDefault();
+});
+window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+// Clear all keys when window loses focus
+window.addEventListener('blur', () => keys.clear());
+
+function isLeft()  { return [...keys].some(k => KeyShuffle.isAction('left',  k)); }
+function isRight() { return [...keys].some(k => KeyShuffle.isAction('right', k)); }
+function isJump()  { return [...keys].some(k => KeyShuffle.isAction('jump',  k)); }
+
+// ── Platform collision (one-way) ─────────────────────────────
+function resolveOneWay(plat) {
+  const pl=playerCont;
+  if(pl.x+PW<=plat.x||pl.x>=plat.x+plat.pw) return;
+  const prevBottom=pl.y+PH-pl.vy;
+  const gDir=gameState.gravityDir;
+  if(gDir>0) {
+    if(pl.vy<0) return;
+    if(prevBottom>plat.y+plat.ph*.5) return;
+    if(pl.y+PH>=plat.y&&pl.y<plat.y+plat.ph){pl.y=plat.y-PH;pl.vy=0;pl.onGround=true;}
+  } else {
+    if(pl.vy>0) return;
+    const pb=plat.y+plat.ph;
+    if(prevBottom<plat.y+plat.ph*.5) return;
+    if(pl.y<=pb&&pl.y+PH>plat.y){pl.y=pb;pl.vy=0;pl.onGround=true;}
+  }
+}
+
+let coyoteTimer=0, jumpBuffer=0;
+
+function resetPlayer(spawnOverride) {
+  if(spawnOverride) {
+    playerCont.x=spawnOverride.x; playerCont.y=spawnOverride.y;
+  } else {
+    playerCont.x=90; playerCont.y=FLOOR_Y-PH-2;
+  }
+  playerCont.vx=0; playerCont.vy=0; playerCont.onGround=false;
+  gameState.gravityDir=1; gameState.shakeX=0; gameState.shakeY=0; gameState.iceMode=false;
+  delete gameState.spawnOverride;
+  coyoteTimer=0; jumpBuffer=0;
+}
+
+function showStartScreen(h1, tag) {
+  document.querySelector('#start-screen h1').textContent = h1;
+  document.getElementById('start-tagline').textContent = tag;
+  document.getElementById('start-screen').style.display = 'flex';
+  gameStarted = false;
+}
+
+// ── Start button ─────────────────────────────────────────────
+let gameStarted = false;
+
+document.getElementById('start-btn').addEventListener('click', () => {
+  if(selected.size===0) return;
+  document.getElementById('start-screen').style.display='none';
+  gameStarted=true;
+
+  // Full reset
+  keys.clear();
+  particles.length=0; particleLayer.clear(); eventLayer.clear(); diamondLayer.clear();
+  app.stage.x=0; app.stage.y=0;
+  resetPlayer();
+
+  EventManager.init({
+    layer:eventLayer, diamondLayer, W, H,
+    getPlayer: ()=>playerCont,
+    getPlatforms: ()=>platforms,
+    gameState, floorY:FLOOR_Y,
+    gameWrap: document.getElementById('game-wrap'),
+    customOrder: buildPlayOrder(),
+    onDeath: score => {
+      setTimeout(()=>{
+        resetPlayer(); eventLayer.clear(); diamondLayer.clear();
+        showStartScreen('ZERO SHIFT',`SCORE: ${score} — PLAY AGAIN?`);
+      }, 400);
+    },
+    onComplete: score => {
+      setTimeout(()=>{
+        resetPlayer(); eventLayer.clear(); diamondLayer.clear();
+        showStartScreen('⬡ CLEARED',`FINAL SCORE: ${score} — PLAY AGAIN?`);
+      }, 400);
+    },
+  });
+
+  EventManager.start();
+});
+
+// ── Main game loop ────────────────────────────────────────────
+app.ticker.add(() => {
+  if(!gameStarted) return;
+
+  // Apply any spawn override from events (e.g. gravity flip places player on platform)
+  if(gameState.spawnOverride) {
+    const s=gameState.spawnOverride; delete gameState.spawnOverride;
+    playerCont.x=s.x; playerCont.y=s.y; playerCont.vx=0; playerCont.vy=0;
+  }
+
+  EventManager.update();
+
+  const state=EventManager.getState();
+  if(state==='dead'||state==='complete') return;
+
+  const pl=playerCont;
+  const gDir=gameState.gravityDir;
+  const isIce=gameState.iceMode;
+
+  // ── Horizontal movement ─────────────────────────
+  if(isLeft())       pl.vx = isIce ? Math.max(pl.vx-.6, -5.5) : -4.8;
+  else if(isRight()) pl.vx = isIce ? Math.min(pl.vx+.6,  5.5) :  4.8;
+  else               pl.vx *= isIce ? 0.97 : 0.72; // ice: barely slows down
+
+  if(pl.vx>0.5)       {playerBody.scale.x=1;  playerBody.x=0;}
+  else if(pl.vx<-0.5) {playerBody.scale.x=-1; playerBody.x=PW;}
+
+  // ── Jump buffer & coyote ────────────────────────
+  if(isJump()) jumpBuffer=8; else if(jumpBuffer>0) jumpBuffer--;
+  if(pl.onGround) coyoteTimer=8; else if(coyoteTimer>0) coyoteTimer--;
+
+  if(jumpBuffer>0&&coyoteTimer>0) {
+    pl.vy=-12*gDir; pl.onGround=false; coyoteTimer=0; jumpBuffer=0;
+  }
+
+  // ── Gravity ─────────────────────────────────────
+  const apex=isJump()&&Math.abs(pl.vy)<4;
+  pl.vy+=GRAVITY_BASE*gDir*(apex?.7:1);
+  if(Math.abs(pl.vy)>18) pl.vy=18*Math.sign(pl.vy);
+
+  pl.x+=pl.vx; pl.y+=pl.vy;
+
+  // ── Floor / ceiling ──────────────────────────────
+  pl.onGround=false;
+  if(gDir>0&&pl.y+PH>=FLOOR_Y){pl.y=FLOOR_Y-PH;pl.vy=0;pl.onGround=true;}
+  if(gDir<0&&pl.y<=30)         {pl.y=30;         pl.vy=0;pl.onGround=true;}
+
+  // ── Platform collisions ──────────────────────────
+  platforms.forEach(resolveOneWay);
+
+  // ── Screen walls ─────────────────────────────────
+  if(pl.x<0)     {pl.x=0;    pl.vx=0;}
+  if(pl.x+PW>W)  {pl.x=W-PW; pl.vx=0;}
+  if(pl.y>H+100||pl.y<-100) resetPlayer();
+
+  // ── Screen shake ─────────────────────────────────
+  app.stage.x=gameState.shakeX||0;
+  app.stage.y=gameState.shakeY||0;
+
+  // ── Cosmetics ────────────────────────────────────
+  playerGlow.alpha=.07+Math.abs(Math.sin(Date.now()*.004))*.08;
+  spawnParticle(); updateParticles();
+});
+
+updateCount();
+</script>
+</body>
+</html>

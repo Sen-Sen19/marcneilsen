@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snake and Ladder - Multiplayer</title>
+<style>
+    body { margin:0; background:#f5f5f5; display:flex; justify-content:center; align-items:center; height:100vh; flex-direction:column; font-family:sans-serif;}
+    #gameCanvas { border:2px solid #333; display:none; }
+    #controls { text-align:center; margin-top:10px; display:none; }
+    button { padding:10px 20px; font-size:16px; cursor:pointer; margin:5px; }
+    #diceRoll { margin-top:10px; font-size:18px; }
+    #currentPlayer { margin-top:10px; font-size:18px; font-weight:bold; }
+    #diceFlash {
+    transition: opacity 0.5s ease-out;
+}
+
+</style>
+</head>
+<body>
+<div id="startScreen">
+    <h2>Select Number of Players</h2>
+    <button data-players="2">2 Players</button>
+    <button data-players="3">3 Players</button>
+    <button data-players="4">4 Players</button>
+    <button data-players="5">5 Players</button>
+    <button data-players="6">6 Players</button>
+</div>
+
+<div id="currentPlayer"></div>
+
+<canvas id="gameCanvas" width="600" height="600"></canvas>
+<div id="controls">
+    <button id="rollBtn">Roll Dice</button>
+    <div id="diceRoll"></div>
+</div>
+<div id="diceFlash" style="position: absolute; font-size: 36px; padding: 20px; background-color: rgba(0, 0, 0, 0.5); color: white; display: none; border-radius: 8px; text-align: center;"></div>
+
+<script src="../plugins/pixi.min.js"></script>
+<script>
+/* ===================== PLAYER TURN DISPLAY ===================== */
+let players = [];
+let currentPlayer = 0;
+
+function updateTurnDisplay(){
+    const cp = players[currentPlayer];
+    const playerDiv = document.getElementById('currentPlayer');
+    playerDiv.textContent = `Player ${currentPlayer+1}'s turn`;
+    playerDiv.style.color = `#${cp.color.toString(16).padStart(6,'0')}`;
+}
+
+/* ===================== PIXI SETUP ===================== */
+const app = new PIXI.Application({ 
+    view: document.getElementById('gameCanvas'), 
+    width: 600, 
+    height: 600, 
+    backgroundColor: 0xffffff 
+});
+const boardSize = 10;
+const tileSize = 60;
+
+/* ===================== BOARD DATA ===================== */
+const snakes = {16:6,47:26,49:11,56:53,62:19,64:60,87:24,93:73,95:75,98:78};
+const ladders = {1:38,4:14,9:31,21:42,28:84,36:44,51:67,71:91,80:100};
+
+/* ===================== BOARD DRAWING ===================== */
+function drawBoard(){
+    app.stage.removeChildren();
+
+    for(let i=0;i<boardSize;i++){
+        for(let j=0;j<boardSize;j++){
+            const tile = new PIXI.Graphics();
+            tile.lineStyle(1,0x000000);
+            tile.beginFill((i+j)%2===0 ? 0xddeeff : 0xaaccff);
+            tile.drawRect(j*tileSize, i*tileSize, tileSize, tileSize);
+            tile.endFill();
+            app.stage.addChild(tile);
+
+            const rowFromBottom = boardSize - 1 - i;
+            const num = rowFromBottom % 2 === 0
+                ? rowFromBottom * boardSize + j + 1
+                : rowFromBottom * boardSize + (boardSize - j);
+
+            const label = new PIXI.Text(num, {fontSize:14, fill:0x000000});
+            label.x = j*tileSize + 5;
+            label.y = i*tileSize + 5;
+            app.stage.addChild(label);
+        }
+    }
+
+    function drawSnake(headTile, tailTile){
+        const head = getTileCoords(headTile);
+        const tail = getTileCoords(tailTile);
+        const snake = new PIXI.Graphics();
+        snake.lineStyle(4, 0xff0000, 1);
+        snake.moveTo(head.x, head.y);
+        snake.bezierCurveTo((head.x+tail.x)/2, head.y-40, (head.x+tail.x)/2, tail.y+40, tail.x, tail.y);
+        app.stage.addChild(snake);
+
+        const headCircle = new PIXI.Graphics();
+        headCircle.beginFill(0xff0000); headCircle.drawCircle(head.x, head.y, 10); headCircle.endFill();
+        app.stage.addChild(headCircle);
+
+        const tailCircle = new PIXI.Graphics();
+        tailCircle.beginFill(0x000000); tailCircle.drawCircle(tail.x, tail.y, 10); tailCircle.endFill();
+        app.stage.addChild(tailCircle);
+    }
+    for(const h in snakes) drawSnake(parseInt(h), snakes[h]);
+
+    function drawLadder(startTile, endTile){
+        const start = getTileCoords(startTile);
+        const end = getTileCoords(endTile);
+        const ladder = new PIXI.Graphics();
+        ladder.lineStyle(4,0x8b4513);
+        ladder.moveTo(start.x-8,start.y); ladder.lineTo(end.x-8,end.y);
+        ladder.moveTo(start.x+8,start.y); ladder.lineTo(end.x+8,end.y);
+
+        const steps = Math.floor(Math.hypot(end.x-start.x, end.y-start.y)/20);
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        for(let i=1;i<=steps;i++){
+            const t = i/steps;
+            const cx = start.x + dx*t;
+            const cy = start.y + dy*t;
+            const len = 16;
+            const px = -dy/Math.hypot(dx,dy) * len/2;
+            const py = dx/Math.hypot(dx,dy) * len/2;
+            ladder.moveTo(cx + px, cy + py);
+            ladder.lineTo(cx - px, cy - py);
+        }
+        app.stage.addChild(ladder);
+    }
+    for(const s in ladders) drawLadder(parseInt(s), ladders[s]);
+}
+
+/* ===================== UTILITY ===================== */
+function getTileCoords(num){
+    if(num<1) num=1;
+    const rowFromBottom = Math.floor((num-1)/boardSize);
+    const col = rowFromBottom % 2 === 0
+        ? (num-1) % boardSize
+        : boardSize - 1 - (num-1) % boardSize;
+    return {
+        x: col*tileSize + tileSize/2,
+        y: (boardSize-1-rowFromBottom)*tileSize + tileSize/2
+    };
+}
+
+/* ===================== GAME LOGIC ===================== */
+function startGame(numPlayers){
+    players = [];
+    drawBoard();
+    const colors = [0xff0000,0x00ff00,0x0000ff,0xff00ff,0xffff00,0x00ffff];
+    for(let i=0;i<numPlayers;i++){
+        const token = new PIXI.Graphics();
+        token.beginFill(colors[i]); token.drawCircle(0,0,15); token.endFill();
+        const offset = (i%2===0?-15:15);
+        token.x = tileSize/2 + offset;
+        token.y = tileSize*boardSize - tileSize/2 + (i>1?15:-15);
+        app.stage.addChild(token);
+        players.push({ pos:0, token, color:colors[i] });
+    }
+    document.getElementById('gameCanvas').style.display='block';
+    document.getElementById('controls').style.display='block';
+    document.getElementById('startScreen').style.display='none';
+    currentPlayer = 0;
+    updateTurnDisplay();
+}
+function movePlayer(player, steps, callback){
+    let path = [];
+    for (let i = 1; i <= steps; i++) {
+        path.push(player.pos + i);
+    }
+    let index = 0;
+
+    function stepMove(){
+        if (index < path.length) {
+            // Check if the next position is beyond 100
+            if (player.pos + index + 1 > 100) {
+                // If it would go past 100, stop at 100
+                player.pos = 100;
+            } else {
+                player.pos = path[index];
+            }
+            const coords = getTileCoords(player.pos);
+            animateTo(player.token, coords, 200, () => { index++; stepMove(); });
+        } else {
+            // Handle snake or ladder movement
+            if (snakes[player.pos] || ladders[player.pos]) {
+                const target = snakes[player.pos] || ladders[player.pos];
+                const coords = getTileCoords(target);
+                animateTo(player.token, coords, 500, () => { 
+                    player.pos = target;
+                    if (callback) callback(); 
+                });
+            } else if (callback) callback();
+        }
+    }
+    stepMove();
+}
+
+function animateTo(token, coords, duration, done){
+    const startX = token.x;
+    const startY = token.y;
+    const jumpHeight = 20;
+    let start = null;
+    function animate(timestamp){
+        if(!start) start = timestamp;
+        const progress = Math.min((timestamp-start)/duration,1);
+        token.x = startX + (coords.x - startX) * progress;
+        token.y = startY + (coords.y - startY) * progress - Math.sin(progress*Math.PI)*jumpHeight;
+        if(progress<1) requestAnimationFrame(animate);
+        else if(done) done();
+    }
+    requestAnimationFrame(animate);
+}
+
+/* ===================== TURN LOGIC ===================== */
+const rollBtn = document.getElementById('rollBtn');
+const diceRollDisplay = document.getElementById('diceRoll');
+
+function nextTurn(){
+    currentPlayer = (currentPlayer+1)%players.length;
+    updateTurnDisplay();
+}
+rollBtn.addEventListener('click', async () => {
+    rollBtn.disabled = true;
+    const player = players[currentPlayer];
+    let diceResult = [0, 0];
+
+    // Roll the dice and display the result immediately
+    for (let i = 0; i < 10; i++) {
+        diceResult = [Math.ceil(Math.random() * 6), Math.ceil(Math.random() * 6)];
+        diceRollDisplay.textContent = `🎲 ${diceResult[0]} + ${diceResult[1]} = ${diceResult[0] + diceResult[1]}`;
+        await new Promise(r => setTimeout(r, 50)); // Simulate dice animation
+    }
+
+    // Display the flash container with dice result
+    const diceFlash = document.getElementById('diceFlash');
+    diceFlash.textContent = `🎲 ${diceResult[0]} + ${diceResult[1]} = ${diceResult[0] + diceResult[1]}`;
+    
+    // Set the color based on the player's color
+    diceFlash.style.backgroundColor = `#${player.color.toString(16).padStart(6, '0')}`;
+    
+    // Reset opacity and display
+    diceFlash.style.opacity = '1';  // Ensure it's visible
+    diceFlash.style.display = 'block';  // Make it visible
+    
+    // Flash the container for 1 second, then fade out
+    setTimeout(() => {
+        diceFlash.style.opacity = '0';  // Fade out after 1 second
+    }, 1000);
+
+    // Wait for the flash effect to finish
+    await new Promise(r => setTimeout(r, 1000));  // Wait for 1 second (flash duration)
+
+    // Move the player after the flash
+    diceFlash.style.display = 'none';  // Hide the flash container completely
+    diceRollDisplay.style.opacity = '0'; // Hide the dice roll display
+    
+    // Move the player based on the dice result
+    movePlayer(player, diceResult[0] + diceResult[1], () => {
+        if (player.pos >= 100) {
+            diceRollDisplay.textContent = `🎉 Player ${currentPlayer + 1} wins!`;
+            rollBtn.disabled = true;
+            return;
+        }
+        nextTurn();
+        rollBtn.disabled = false;
+    });
+});
+
+
+
+/* ===================== START SCREEN ===================== */
+document.querySelectorAll('#startScreen button').forEach(btn=>{
+    btn.addEventListener('click',()=>startGame(parseInt(btn.dataset.players)));
+});
+</script>
+</body>
+</html>

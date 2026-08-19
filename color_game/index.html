@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sen Color Game</title>
+<style>
+:root{
+  --bg:#0f1226;
+  --panel:#101426;
+  --accent:#6cf;
+  --muted:#9aa;
+}
+
+*{
+  box-sizing:border-box;
+  font-family:Inter,system-ui,Segoe UI,Roboto,Arial;
+}
+
+body{
+  margin:0;
+  min-height:100vh;
+  background:linear-gradient(180deg,#071028 0%, #0c1222 100%);
+  color:#e6eef8;
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  padding:16px;
+}
+
+.wrap{
+  width:100%;
+  max-width:980px;
+  display:grid;
+  grid-template-columns:320px 1fr;
+  gap:18px;
+}
+
+@media (max-width: 900px){
+  .wrap{
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel{
+  background:rgba(255,255,255,0.03);
+  padding:16px;
+  border-radius:12px;
+  box-shadow:0 6px 18px rgba(2,6,23,0.6);
+  display:flex;
+  flex-direction:column;
+}
+
+.side{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+/* NEW WRAPPERS FOR BETTING CONTROLS + LOG */
+.balance-controls{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.log-wrapper{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+/* MONEY DISPLAY */
+.money{
+  font-size:28px;
+  font-weight:700;
+}
+.muted{
+  color:var(--muted);
+  font-size:13px;
+}
+
+/* CONTROLS */
+.controls{
+  display:grid;
+  gap:8px;
+}
+label{
+  font-size:13px;
+  color:var(--muted);
+}
+input[type=number]{
+  width:100%;
+  padding:8px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.06);
+  background:rgba(255,255,255,0.02);
+  color:inherit;
+}
+
+.colors{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.color-btn{
+  flex:1 1 30%;
+  padding:10px;
+  border-radius:8px;
+  border:2px solid rgba(255,255,255,0.04);
+  cursor:pointer;
+  text-align:center;
+  font-weight:700;
+}
+.color-btn.selected {
+  outline:4px solid rgba(108,204,255,0.3);
+  box-shadow:0 0 15px rgba(108,204,255,0.5);
+  transform: scale(1.05);
+  font-weight:700;
+  transition: all 0.2s ease;
+}
+
+button.action{
+  padding:12px;
+  border-radius:10px;
+  border:0;
+  background:linear-gradient(90deg,#6cf,#4aa);
+  color:#012;
+  cursor:pointer;
+  font-weight:800;
+}
+
+.row{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.row button{
+  flex:1 1 auto;
+}
+
+/* GAME AREA */
+.game-area{
+  position:relative;
+  border-radius:12px;
+  overflow:hidden;
+  width:100%;
+  height:auto;
+}
+canvas#matterCanvas{
+  display:block;
+  width:100%;
+  height:auto;
+  aspect-ratio: 800/560;
+  border-radius:12px;
+  background:linear-gradient(180deg,#061224,#08132a);
+}
+canvas#glowCanvas{
+  position:absolute;
+  top:0;
+  left:0;
+  pointer-events:none;
+}
+
+/* LOG */
+.log{
+  max-height:160px;
+  overflow:auto;
+  padding:8px;
+  background:rgba(255,255,255,0.02);
+  border-radius:8px;
+  font-size:13px;
+}
+
+/* FOOTER */
+footer{
+  margin-top:8px;
+  color:var(--muted);
+  font-size:12px;
+  text-align:center;
+}
+
+/* RESPONSIVE SMALL SCREEN ADJUSTMENTS */
+@media (max-width: 500px){
+  .money{font-size:22px}
+  .color-btn{flex:1 1 45%; font-size:12px; padding:6px;}
+  input[type=number]{padding:6px;font-size:14px}
+  button.action{padding:10px;font-size:14px}
+  .log{font-size:12px;max-height:120px}
+  /* Move log below controls */
+  .log-wrapper{
+    margin-top:12px;
+  }
+}
+</style>
+
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel side">
+      <div>
+        <div class="money" id="moneyDisplay">$0</div>
+        <div class="muted">Balance</div>
+      </div>
+      <div class="controls">
+        <div>
+          <label>Bet amount</label>
+          <input id="betInput" type="number" min="1" step="1" value="10">
+        </div>
+        <div>
+          <label>Pick a color</label>
+          <div class="colors" id="colorsList"></div>
+        </div>
+    <div class="row">
+  <button class="action" id="spinBtn">SPIN</button>
+  <button class="action" id="resetBtn">Reset Money</button>
+</div>
+
+      </div>
+      <div>
+        <label>Game log</label>
+        <div class="log" id="log"></div>
+      </div>
+      <footer>Payouts are 2x for win.</footer>
+    </div>
+
+    <div class="panel">
+      <div class="game-area" id="gameArea">
+        <canvas id="matterCanvas" width="800" height="560"></canvas>
+        <canvas id="glowCanvas" width="800" height="560" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Local libraries -->
+  <script src="../plugins/matter.min.js"></script>
+  <script src="../plugins/pixi.min.js"></script>
+  <script src="../plugins/sweetalert2@11"></script>
+<script>
+const COLORS = [
+  {name:'Red', hex:'#f44336'},
+  {name:'Blue', hex:'#2196f3'},
+  {name:'Yellow', hex:'#ffeb3b'},
+  {name:'Green', hex:'#4caf50'},
+  {name:'White', hex:'#ffffff'},
+  {name:'Violet', hex:'#9c27b0'}
+];
+
+const KEY = 'colorGame_money', LOG_KEY='colorGame_logs', START_MONEY=200, MAX_LOGS=10;
+
+const moneyDisplay=document.getElementById('moneyDisplay'),
+      betInput=document.getElementById('betInput'),
+      colorsList=document.getElementById('colorsList'),
+      spinBtn=document.getElementById('spinBtn'),
+      resetBtn=document.getElementById('resetBtn'),
+      logEl=document.getElementById('log');
+
+let selectedColorIndex=0, money=loadMoney(), spinning=false, ball=null, tiles=[], shockwave=null, glowingTileIdx=null, glowPulse=0;
+let sparks = [], ballTrail = [];
+
+// ------------------ Local Storage ------------------
+function loadMoney(){
+  const raw = localStorage.getItem(KEY);
+  if(raw===null){ localStorage.setItem(KEY, String(START_MONEY)); return START_MONEY; }
+  const n = Number(raw); return Number.isFinite(n)?n:START_MONEY;
+}
+function saveMoney(){ localStorage.setItem(KEY,String(money)); updateUI(); }
+function updateUI(){ moneyDisplay.textContent='$'+money.toFixed(2); }
+
+// ------------------ Logs ------------------
+function appendLog(text){
+  let logs=JSON.parse(localStorage.getItem(LOG_KEY)||'[]');
+  logs.unshift(text);
+  if(logs.length>MAX_LOGS) logs=logs.slice(0,MAX_LOGS);
+  localStorage.setItem(LOG_KEY,JSON.stringify(logs));
+  renderLogs();
+}
+function renderLogs(){
+  let logs=JSON.parse(localStorage.getItem(LOG_KEY)||'[]');
+  logEl.innerHTML='';
+  logs.forEach((text,i)=>{
+    const p=document.createElement('div');
+    p.textContent=text;
+    p.style.padding='2px 4px';
+    p.style.borderRadius='4px';
+    if(i===0){ p.style.background='rgba(108,204,255,0.5)'; p.style.fontWeight='700'; }
+    else {p.style.background='transparent'; p.style.fontWeight='400';}
+    logEl.appendChild(p);
+  });
+}
+renderLogs();
+
+// ------------------ Color buttons ------------------
+function makeColorButtons(){
+  colorsList.innerHTML='';
+  COLORS.forEach((c,i)=>{
+    const btn=document.createElement('div');
+    btn.className='color-btn'+(i===selectedColorIndex?' selected':'');
+    btn.style.background=c.hex;
+    btn.style.color=(c.name==='White')?'#000':'#012';
+    btn.textContent=c.name;
+    btn.onclick=()=>{ selectedColorIndex=i; makeColorButtons(); };
+    colorsList.appendChild(btn);
+  });
+}
+makeColorButtons();
+updateUI();
+
+// ------------------ Matter.js ------------------
+const canvas=document.getElementById('matterCanvas'), 
+      glowCanvas=document.getElementById('glowCanvas'), 
+      glowCtx=glowCanvas.getContext('2d');
+
+let Engine=window.Matter?Matter.Engine:null, engine, render, world;
+
+function setupMatter(){
+  if(!Engine) return false;
+  engine=Matter.Engine.create(); 
+  world=engine.world; 
+  world.gravity.y=1.5;
+
+  const w=canvas.width, h=canvas.height;
+
+  render=Matter.Render.create({
+    canvas:canvas,
+    engine:engine,
+    options:{
+      width:w,
+      height:h,
+      wireframes:false,
+      background:'#08132a',
+      showAngleIndicator:false
+    }
+  });
+
+  // Walls + ground + ceiling
+  const ground=Matter.Bodies.rectangle(w/2,h+30,w,60,{isStatic:true,render:{fillStyle:'#021024'}}),
+        left=Matter.Bodies.rectangle(-30,h/2,60,h,{isStatic:true,render:{fillStyle:'#021024'}}),
+        right=Matter.Bodies.rectangle(w+30,h/2,60,h,{isStatic:true,render:{fillStyle:'#021024'}}),
+        ceiling=Matter.Bodies.rectangle(w/2,-30,w,60,{isStatic:true,render:{fillStyle:'#021024'}});
+  Matter.World.add(world,[ground,left,right,ceiling]);
+
+  // Pegs
+  const pegs=[]; 
+  const pegRows=6, pegCols=12, pegSpacingX=w/pegCols, pegSpacingY=60;
+  for(let r=0;r<pegRows;r++){
+    for(let c=0;c<pegCols;c++){
+      const offset=(r%2)*(pegSpacingX/2), x=c*pegSpacingX+offset+20, y=120+r*pegSpacingY;
+      pegs.push(Matter.Bodies.circle(x,y,6,{
+        isStatic:true, 
+        restitution:0.8, // bouncier pegs
+        render:{fillStyle:'#fff'}
+      }));
+    }
+  }
+  Matter.World.add(world,pegs);
+
+  // Tiles
+  const tileW=Math.floor(w/COLORS.length);
+  tiles=[];
+  for(let i=0;i<COLORS.length;i++){
+    const x=tileW*i+tileW/2, y=h-40;
+    tiles.push(Matter.Bodies.rectangle(x,y,tileW-6,80,{
+      isStatic:true,
+      label:'tile_'+i,
+      render:{ fillStyle: COLORS[i].hex, strokeStyle:'#000', lineWidth:2 }
+    }));
+  }
+  Matter.World.add(world,tiles);
+
+  // Collision
+  Matter.Events.on(engine,'collisionStart',e=>{
+    e.pairs.forEach(pair=>{
+      [pair.bodyA,pair.bodyB].forEach(body=>{
+        if(body.label && body.label.startsWith('tile_') && spinning && ball){
+          const idx=Number(body.label.split('_')[1]);
+          spinning=false;
+          Matter.Body.setPosition(ball,{x:body.position.x,y:body.position.y-24});
+          Matter.Body.setVelocity(ball,{x:0,y:0});
+          ball.finalTile=idx;
+          shockwave={tile:idx,radius:0,max:60};
+          glowingTileIdx=idx;
+          createSparks(idx,50);
+          resolveResult(idx);
+        }
+      });
+    });
+  });
+
+  // Keep ball inside canvas
+  Matter.Events.on(engine, 'afterUpdate', () => {
+    if(ball){
+      const radius = 18;
+      ball.position.x = Math.min(Math.max(ball.position.x, radius), canvas.width - radius);
+      ball.position.y = Math.min(Math.max(ball.position.y, radius), canvas.height - radius);
+    }
+  });
+
+  // Render loop (ball trail, sparks, glow)
+  Matter.Events.on(render,'afterRender',()=>{
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width / canvas.width;
+    const scaleY = rect.height / canvas.height;
+
+    glowCtx.globalCompositeOperation = 'destination-out';
+    glowCtx.fillStyle = 'rgba(0,0,0,0.15)';
+    glowCtx.fillRect(0,0,glowCanvas.width,glowCanvas.height);
+    glowCtx.globalCompositeOperation = 'source-over';
+
+    if(ball){
+      ballTrail.push({x:ball.position.x*scaleX, y:ball.position.y*scaleY});
+      if(ballTrail.length>25) ballTrail.shift();
+
+      if(ballTrail.length>1){
+        glowCtx.save();
+        glowCtx.lineWidth = 6;
+        glowCtx.lineCap = 'round';
+        for(let i=0;i<ballTrail.length-1;i++){
+          const t1=ballTrail[i], t2=ballTrail[i+1];
+          const alpha = i / ballTrail.length * 0.5;
+          glowCtx.strokeStyle = `rgba(100,200,255,${alpha})`;
+          glowCtx.beginPath();
+          glowCtx.moveTo(t1.x,t1.y);
+          glowCtx.lineTo(t2.x,t2.y);
+          glowCtx.stroke();
+        }
+        glowCtx.restore();
+      }
+
+      sparks.push({
+        x: ball.position.x*scaleX,
+        y: ball.position.y*scaleY,
+        vx: (Math.random()-0.5)*0.5,
+        vy: (Math.random()-0.5)*0.5,
+        alpha:1,
+        size:1+Math.random()*2,
+        color:'rgba(100,200,255,0.7)'
+      });
+    }
+
+    if(shockwave){
+      const t=tiles[shockwave.tile];
+      glowCtx.save();
+      glowCtx.strokeStyle=COLORS[shockwave.tile].hex;
+      glowCtx.lineWidth=4;
+      glowCtx.globalAlpha=0.4*(1-shockwave.radius/shockwave.max);
+      glowCtx.beginPath();
+      glowCtx.arc(t.position.x*scaleX, t.position.y*scaleY, shockwave.radius*scaleX,0,Math.PI*2);
+      glowCtx.stroke();
+      glowCtx.restore();
+      shockwave.radius+=2;
+      if(shockwave.radius>=shockwave.max) shockwave=null;
+    }
+
+    for(let i=sparks.length-1;i>=0;i--){
+      const s=sparks[i];
+      glowCtx.save();
+      glowCtx.fillStyle=s.color;
+      glowCtx.globalAlpha=s.alpha;
+      glowCtx.beginPath();
+      glowCtx.arc(s.x,s.y,s.size,0,Math.PI*2);
+      glowCtx.fill();
+      glowCtx.restore();
+      s.x+=s.vx; s.y+=s.vy; s.vy+=0.15; s.alpha-=0.03;
+      if(s.alpha<=0) sparks.splice(i,1);
+    }
+
+    if(glowingTileIdx!==null){
+      const t=tiles[glowingTileIdx];
+      const tileW=t.bounds.max.x-t.bounds.min.x, tileH=t.bounds.max.y-t.bounds.min.y;
+      glowPulse+=0.05;
+      const alpha = 0.15 + 0.1 * Math.sin(glowPulse*2);
+      glowCtx.save();
+      glowCtx.shadowBlur=20;
+      glowCtx.shadowColor=COLORS[glowingTileIdx].hex;
+      glowCtx.fillStyle=COLORS[glowingTileIdx].hex;
+      glowCtx.globalAlpha=alpha;
+      glowCtx.fillRect(t.position.x*scaleX-tileW/2*scaleX, t.position.y*scaleY-tileH/2*scaleY, tileW*scaleX, tileH*scaleY);
+      glowCtx.restore();
+    }
+  });
+
+  Matter.Engine.run(engine);
+  Matter.Render.run(render);
+
+  return true;
+}
+
+// ------------------ Sparks ------------------
+function createSparks(tileIdx, count=15){
+  const t = tiles[tileIdx];
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = rect.width / canvas.width;
+  const scaleY = rect.height / canvas.height;
+  const cx = ball ? ball.position.x*scaleX : t.position.x*scaleX;
+  const cy = ball ? ball.position.y*scaleY : (t.position.y-24)*scaleY;
+
+  for(let i=0;i<count;i++){
+    sparks.push({ 
+      x: cx, 
+      y: cy, 
+      vx: (Math.random()-0.5)*8,
+      vy: (Math.random()-2)*8,
+      alpha: 0.6, 
+      size: 1 + Math.random()*3,
+      color: COLORS[tileIdx].hex 
+    });
+  }
+}
+
+// ------------------ Spin ------------------
+function spinWithPhysics(){
+  if(!engine) return spinFallback();
+  spinning=true; glowingTileIdx=null;
+  const toRemove = world.bodies.filter(b => b.label==='spinBall');
+  Matter.World.remove(world, toRemove);
+  ball=null;
+
+  const w=canvas.width, h=canvas.height;
+  const startX = 18 + Math.random() * (w - 36);
+  const startY = 30;
+
+  ball = Matter.Bodies.circle(startX, startY, 18, {
+    restitution:1,
+    friction:1,
+    frictionAir:0.02,
+    density:0.008,
+    render:{fillStyle:'#6cf'},
+    label:'spinBall'
+  });
+
+  Matter.Body.applyForce(ball, ball.position, {x:(Math.random()-0.5)*0.05, y:0.05});
+  ball.angularVelocity = (Math.random()-0.5)*0.3;
+  Matter.World.add(world,ball);
+  ballTrail=[];
+}
+
+function spinFallback(){
+  spinning=false;
+  const winIdx=Math.floor(Math.random()*COLORS.length);
+  resolveResult(winIdx);
+}
+
+// ------------------ Resolve result ------------------
+function resolveResult(winIdx){
+  spinning=false;
+  if(ball){ Matter.World.remove(world,ball); ball=null; }
+  const bet=Number(betInput.value)||0;
+  if(bet<=0){ appendLog('Invalid bet'); return; }
+  if(bet>money){ appendLog('Insufficient funds'); return; }
+  const chosen=selectedColorIndex;
+  appendLog(`Result: ${COLORS[winIdx].name}. You bet on ${COLORS[chosen].name} for $${bet}.`);
+  if(winIdx===chosen){ money+=bet; appendLog(`You WIN! +$${bet}`); }
+  else{ money-=bet; appendLog(`You LOSE. -$${bet}`); }
+  saveMoney();
+  glowingTileIdx=winIdx; glowPulse=0;
+}
+
+// ------------------ UI events ------------------
+spinBtn.addEventListener('click',()=>{
+  if(spinning) return;
+  const bet=Number(betInput.value)||0;
+  if(bet<=0){ appendLog('Enter a valid bet'); return; }
+if(bet>money){
+  appendLog('Not enough money');
+  Swal.fire({
+    icon: 'error',
+    title: 'Insufficient Funds',
+    text: `You only have $${money.toFixed(2)} available.`,
+    timer: 1500,
+    showConfirmButton: false
+  });
+  return;
+}
+
+  appendLog(`Spinning... bet $${bet} on ${COLORS[selectedColorIndex].name}`);
+  if(Engine) spinWithPhysics(); else spinFallback();
+});
+resetBtn.addEventListener('click', () => {
+  Swal.fire({
+    title: 'Reset Money',
+    html: `
+      <p>Enter the amount you want to reset your money to:</p>
+      <input type="number" id="swal-money-input" value="${money}" min="1" step="1" style="width:100%;padding:6px;border-radius:4px;border:1px solid #ccc;">`,
+    showCancelButton: true,
+    confirmButtonText: 'Reset',
+    cancelButtonText: 'Cancel',
+    preConfirm: () => {
+      const input = document.getElementById('swal-money-input');
+      const n = Number(input.value);
+      if (!Number.isFinite(n) || n <= 0) {
+        Swal.showValidationMessage('Please enter a valid positive number');
+        return false;
+      }
+      return n;
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      money = result.value;
+      saveMoney();
+      appendLog(`Money reset to $${money}`);
+      Swal.fire({
+        title: 'Reset!',
+        text: `Your money has been set to $${money}`,
+        icon: 'success',
+        showConfirmButton: false,
+        timer: 1500
+      });
+    }
+  });
+});
+
+
+const matterOk=setupMatter();
+if(!matterOk) appendLog('Matter.js not found — game will use random draws.');
+</script>
+
+
+
+</body>
+</html>

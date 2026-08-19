@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Spin The Wheel</title>
+<style>
+body {
+    background: #0f0f0f;
+    color: white;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    padding: 20px;
+    overflow-x: hidden;
+}
+
+.container {
+    max-width: 500px;
+    width: 90%;
+    margin: auto;
+}
+
+select, input, button {
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: none;
+    margin: 10px 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+button {
+    background: #4a5cff;
+    color: white;
+    cursor: pointer;
+    font-size: 18px;
+    transition: 0.2s;
+}
+
+button:hover {
+    transform: scale(1.05);
+}
+
+.hidden { display: none !important; }
+
+.wheel-container { 
+    margin: 20px auto; 
+    position: relative; 
+    width: 100%;
+}
+
+#wheel {
+    width: 100%;
+    height: auto;
+    max-width: 400px;
+}
+
+#winnerPopup {
+    position: fixed; top:0; left:0; width:100%; height:100%;
+    backdrop-filter: blur(15px); background: rgba(0,0,0,0.4);
+    display: flex; justify-content: center; align-items: center;
+    z-index: 9999; font-size: 60px; font-weight:bold;
+}
+
+.winner-box {
+    background: rgba(255,255,255,0.1);
+    padding: 20px 40px;
+    border-radius: 20px;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 0 20px rgba(255,255,255,0.3);
+    position: relative;
+    font-size: 2rem;
+}
+
+canvas { display: block; max-width: 100%; height: auto; }
+
+#customList {
+    max-height: 120px;
+    overflow-y: auto;
+    text-align: left;
+    padding: 5px;
+    margin: 5px 0;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    list-style: none;
+}
+
+#customList li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    margin-bottom: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 6px;
+}
+
+#customList li button {
+    background: transparent;
+    border: none;
+    color: #ff5555;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+}
+
+/* Mobile responsiveness */
+@media screen and (max-width: 480px) {
+    body {
+        padding: 10px;
+    }
+    h1 {
+        font-size: 1.8rem;
+    }
+    button {
+        font-size: 16px;
+        padding: 10px;
+    }
+    #winnerPopup {
+        font-size: 40px;
+    }
+    .winner-box {
+        padding: 15px 25px;
+        font-size: 1.5rem;
+    }
+}
+</style>
+
+</head>
+<body>
+<div class="container">
+<h1>Pro Spin The Wheel</h1>
+
+<div>
+<label><input type="checkbox" id="removeMode"> Remove When Picked</label>
+</div>
+
+<select id="categorySelector">
+<option value="letters">Letters</option>
+<option value="numbers">Numbers</option>
+<option value="vowels">Vowels</option>
+<option value="shapes">Shapes</option>
+<option value="custom">Custom</option>
+</select>
+
+<div id="customInputArea" class="hidden">
+<input id="customItem" type="text" placeholder="Add custom item">
+<button id="addCustomBtn">Add</button>
+<ul id="customList"></ul>
+</div>
+
+<div class="wheel-container">
+<canvas id="wheel" width="400" height="400"></canvas>
+</div>
+
+<button id="spinBtn">SPIN</button>
+</div>
+
+<div id="winnerPopup" class="hidden">
+<div class="winner-box" id="winnerBox"></div>
+</div>
+
+<!-- Confetti on top -->
+<canvas id="confettiCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10000;"></canvas>
+
+<audio id="spinSound" src="https://www.myinstants.com/media/sounds/slot-machine-spin.mp3"></audio>
+<audio id="winSound" src="https://www.myinstants.com/media/sounds/tada-fanfare.mp3"></audio>
+
+<script>
+// --- Data ---
+const defaultCategories = {
+    letters: "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""),
+    numbers: Array.from({ length: 20 }, (_, i) => (i + 1).toString()),
+    vowels: ["A","E","I","O","U"],
+    shapes: ["Circle", "Square", "Triangle", "Star", "Rectangle"]
+};
+let customChoices = JSON.parse(localStorage.getItem("customChoices")) || [];
+let currentItems = defaultCategories.letters;
+
+// --- DOM ---
+const selector = document.getElementById("categorySelector");
+const customArea = document.getElementById("customInputArea");
+const customInput = document.getElementById("customItem");
+const addBtn = document.getElementById("addCustomBtn");
+const customList = document.getElementById("customList");
+const wheelCanvas = document.getElementById("wheel");
+const ctx = wheelCanvas.getContext("2d");
+const spinBtn = document.getElementById("spinBtn");
+const removeMode = document.getElementById("removeMode");
+const winnerPopup = document.getElementById("winnerPopup");
+const winnerBox = document.getElementById("winnerBox");
+const confettiCanvas = document.getElementById("confettiCanvas");
+const confettiCtx = confettiCanvas.getContext("2d");
+const spinSound = document.getElementById("spinSound");
+const winSound = document.getElementById("winSound");
+
+// --- Wheel drawing ---
+function drawWheel(items, highlightIndex = -1) {
+    const radius = wheelCanvas.width/2;
+    const arc = (2*Math.PI)/items.length;
+    ctx.clearRect(0,0,wheelCanvas.width,wheelCanvas.height);
+    ctx.save();
+    ctx.translate(radius,radius);
+    items.forEach((item,i)=>{
+        ctx.beginPath();
+        let hue = i*360/items.length;
+        ctx.fillStyle = `hsl(${hue},70%,${highlightIndex===i?65:50}%)`;
+        ctx.moveTo(0,0);
+        ctx.arc(0,0,radius,i*arc,(i+1)*arc);
+        ctx.fill();
+
+        ctx.save();
+        ctx.rotate(i*arc+arc/2);
+        if(selector.value==="shapes") drawShape(item,radius/2);
+        else {
+            ctx.textAlign="right";
+            ctx.fillStyle="#fff";
+            ctx.font = `${Math.max(14,20-items.length/2)}px Arial`;
+            ctx.fillText(item,radius-10,10);
+        }
+        ctx.restore();
+    });
+    ctx.restore();
+}
+
+// --- Shapes helpers ---
+function drawShape(name,distance){
+    ctx.save();
+    ctx.translate(distance,0);
+    ctx.fillStyle="white";
+    switch(name){
+        case "Circle": ctx.beginPath(); ctx.arc(0,0,20,0,Math.PI*2); ctx.fill(); break;
+        case "Square": ctx.fillRect(-20,-20,40,40); break;
+        case "Triangle": ctx.beginPath(); ctx.moveTo(0,-22); ctx.lineTo(19,18); ctx.lineTo(-19,18); ctx.closePath(); ctx.fill(); break;
+        case "Star": drawStar(ctx,0,0,5,25,10); break;
+        case "Rectangle": ctx.fillRect(-30,-15,60,30); break;
+    }
+    ctx.restore();
+}
+function drawStar(ctx,x,y,points,radius,inset){
+    ctx.beginPath();
+    let a = Math.PI/points;
+    for(let i=0;i<2*points;i++){
+        let r = i%2===0 ? radius : inset;
+        let angle = i*a;
+        ctx.lineTo(x+Math.cos(angle)*r, y+Math.sin(angle)*r);
+    }
+    ctx.closePath();
+    ctx.fill();
+}
+
+// --- Confetti ---
+let particles=[];
+function startConfetti(){
+    confettiCanvas.width = window.innerWidth;
+    confettiCanvas.height = window.innerHeight;
+    particles = Array.from({length:120},()=>({
+        x: Math.random()*confettiCanvas.width,
+        y: Math.random()*-50,
+        size:5+Math.random()*5,
+        speed:2+Math.random()*3,
+        tilt:Math.random()*4-2,
+        color:`hsl(${Math.random()*360},70%,50%)`
+    }));
+    animateConfetti();
+}
+function animateConfetti(){
+    confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+    particles.forEach(p=>{
+        confettiCtx.fillStyle=p.color;
+        confettiCtx.fillRect(p.x,p.y,p.size,p.size);
+        p.y+=p.speed;
+        p.x+=p.tilt;
+    });
+    particles = particles.filter(p=>p.y<confettiCanvas.height);
+    if(particles.length>0) requestAnimationFrame(animateConfetti);
+}
+
+// --- Spin logic ---
+let spinning=false;
+let angle=0;
+function easeOutQuart(t){return 1-(--t)*t*t*t;}
+function spinWheel(){
+    if(spinning) return;
+    spinning=true;
+    spinSound.currentTime=0; spinSound.play();
+    const duration = 4000 + Math.random()*2000;
+    const startAngle = angle;
+    const rotations = 6 + Math.random()*3;
+    const targetAngle = startAngle + rotations*Math.PI*2 + Math.random()*Math.PI*2;
+    const startTime = performance.now();
+
+    function animate(time){
+        let elapsed = time-startTime;
+        let t = Math.min(elapsed/duration,1);
+        angle = startAngle + (targetAngle-startAngle)*easeOutQuart(t);
+        wheelCanvas.style.transform = `rotate(${angle}rad)`;
+        drawWheel(currentItems);
+        if(t<1) requestAnimationFrame(animate);
+        else finishSpin();
+    }
+    requestAnimationFrame(animate);
+}
+
+function finishSpin(){
+    spinning=false;
+    const normalized = angle%(2*Math.PI);
+    let index = Math.floor(currentItems.length - normalized/(2*Math.PI)*currentItems.length);
+    index = (index+currentItems.length)%currentItems.length;
+    const winner = currentItems[index];
+
+    startConfetti();
+    winSound.currentTime=0; winSound.play();
+
+    winnerBox.innerHTML="";
+    if(selector.value==="shapes"){
+        const popupCanvas = document.createElement("canvas");
+        popupCanvas.width=150; popupCanvas.height=150;
+        const pCtx = popupCanvas.getContext("2d");
+        pCtx.translate(75,75);
+        drawShapePopup(winner,pCtx);
+        winnerBox.appendChild(popupCanvas);
+    } else winnerBox.textContent=winner;
+
+    winnerPopup.classList.remove("hidden");
+
+    if(removeMode.checked){
+        currentItems.splice(index,1);
+        if(selector.value==="custom"){
+            const i = customChoices.indexOf(winner);
+            if(i>-1){ customChoices.splice(i,1); localStorage.setItem("customChoices",JSON.stringify(customChoices)); renderCustomItems(); }
+        }
+        drawWheel(currentItems);
+    }
+}
+
+// Draw winner shape popup
+function drawShapePopup(name,pCtx){
+    pCtx.save();
+    pCtx.fillStyle="white";
+    switch(name){
+        case "Circle": pCtx.beginPath(); pCtx.arc(0,0,50,0,Math.PI*2); pCtx.fill(); break;
+        case "Square": pCtx.fillRect(-50,-50,100,100); break;
+        case "Triangle": pCtx.beginPath(); pCtx.moveTo(0,-50); pCtx.lineTo(43,43); pCtx.lineTo(-43,43); pCtx.closePath(); pCtx.fill(); break;
+        case "Star": drawStar(pCtx,0,0,5,50,20); break;
+        case "Rectangle": pCtx.fillRect(-75,-40,150,80); break;
+    }
+    pCtx.restore();
+}
+
+// --- Custom items ---
+function renderCustomItems(){
+    customList.innerHTML="";
+    customChoices.forEach((item,i)=>{
+        const li=document.createElement("li");
+        li.textContent=item+" ";
+        const delBtn=document.createElement("button");
+        delBtn.textContent="❌";
+        delBtn.onclick=()=>{ 
+            customChoices.splice(i,1); 
+            localStorage.setItem("customChoices",JSON.stringify(customChoices)); 
+            renderCustomItems(); 
+            if(selector.value==="custom"){currentItems=customChoices; drawWheel(currentItems);} 
+        };
+        li.appendChild(delBtn);
+        customList.appendChild(li);
+    });
+}
+addBtn.onclick=()=>{
+    const val = customInput.value.trim();
+    if(!val) return;
+    customChoices.push(val);
+    localStorage.setItem("customChoices",JSON.stringify(customChoices));
+    renderCustomItems();
+    if(selector.value==="custom"){currentItems=customChoices; drawWheel(currentItems);}
+    customInput.value="";
+};
+
+// --- Category switching ---
+selector.addEventListener("change",()=>{
+    if(selector.value==="custom"){ customArea.classList.remove("hidden"); currentItems=customChoices; }
+    else{ customArea.classList.add("hidden"); currentItems=defaultCategories[selector.value]; }
+    drawWheel(currentItems);
+});
+
+// --- Winner popup hide ---
+winnerPopup.onclick=()=>{ winnerPopup.classList.add("hidden"); };
+
+// --- Initial render ---
+renderCustomItems();
+drawWheel(currentItems);
+
+// --- Spin button ---
+spinBtn.addEventListener("click",spinWheel);
+</script>
+</body>
+</html>

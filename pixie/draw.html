@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixi + Matter Draw Physics Box</title>
+<style>
+html,body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #111;
+}
+canvas { display:block; }
+</style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.x/dist/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+<script>
+const app = new PIXI.Application({ backgroundColor: 0x111111, resizeTo: window });
+document.body.appendChild(app.view);
+
+// Matter.js setup
+const { Engine, World, Bodies, Mouse, MouseConstraint } = Matter;
+const engine = Engine.create();
+const world = engine.world;
+world.gravity.y = 1;
+
+// --- World boundaries (browser edges) ---
+const wallThickness = 60;
+const w = window.innerWidth, h = window.innerHeight;
+
+const walls = [
+  Bodies.rectangle(w/2, -wallThickness/2, w, wallThickness, { isStatic: true }), // top
+  Bodies.rectangle(w/2, h + wallThickness/2, w, wallThickness, { isStatic: true }), // bottom
+  Bodies.rectangle(-wallThickness/2, h/2, wallThickness, h, { isStatic: true }), // left
+  Bodies.rectangle(w + wallThickness/2, h/2, wallThickness, h, { isStatic: true }) // right
+];
+World.add(world, walls);
+
+// --- Ball ---
+const ball = Bodies.circle(w/2, 100, 25, { restitution: 0.8, friction: 0.2 });
+World.add(world, ball);
+
+// --- PIXI Layers ---
+const drawLayer = new PIXI.Graphics();
+app.stage.addChild(drawLayer);
+
+const ballSprite = new PIXI.Graphics();
+ballSprite.beginFill(0x2d2c2e);
+ballSprite.drawCircle(0,0,25);
+ballSprite.endFill();
+app.stage.addChild(ballSprite);
+
+// --- Drawing System ---
+let drawing = false;
+let points = [];
+let tempLine = new PIXI.Graphics();
+app.stage.addChild(tempLine);
+
+app.view.addEventListener("pointerdown", e => {
+  // Check if near ball — let mouseConstraint handle it
+  const dx = e.clientX - ball.position.x;
+  const dy = e.clientY - ball.position.y;
+  if (Math.sqrt(dx*dx + dy*dy) < 30) return;
+
+  drawing = true;
+  points = [];
+});
+
+app.view.addEventListener("pointermove", e => {
+  if (!drawing) return;
+  const x = e.clientX, y = e.clientY;
+  points.push({x,y});
+  tempLine.clear();
+  tempLine.lineStyle(3, 0x2d2c2e);
+  tempLine.moveTo(points[0].x, points[0].y);
+  for (let i=1; i<points.length; i++) tempLine.lineTo(points[i].x, points[i].y);
+});
+
+app.view.addEventListener("pointerup", e => {
+  if (!drawing) return;
+  drawing = false;
+  tempLine.clear();
+  if (points.length < 2) return;
+
+  drawLayer.lineStyle(3, 0x2d2c2e);
+  drawLayer.moveTo(points[0].x, points[0].y);
+  for (let i=1; i<points.length; i++) drawLayer.lineTo(points[i].x, points[i].y);
+
+  // Create physics edges for drawn line
+  for (let i = 1; i < points.length; i++) {
+    const p1 = points[i-1], p2 = points[i];
+    const midX = (p1.x + p2.x)/2;
+    const midY = (p1.y + p2.y)/2;
+    const length = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    const wall = Bodies.rectangle(midX, midY, length, 4, {
+      isStatic: true,
+      angle: angle,
+      friction: 0.3,
+      restitution: 0.4
+    });
+    World.add(world, wall);
+  }
+});
+
+// --- Mouse drag for the ball ---
+const mouse = Mouse.create(app.view);
+const mouseConstraint = MouseConstraint.create(engine, {
+  mouse: mouse,
+  constraint: {
+    stiffness: 0.3,
+    render: { visible: false }
+  }
+});
+World.add(world, mouseConstraint);
+
+// --- Update loop ---
+app.ticker.add(() => {
+  Matter.Engine.update(engine);
+  ballSprite.x = ball.position.x;
+  ballSprite.y = ball.position.y;
+  ballSprite.rotation = ball.angle;
+});
+</script>
+</body>
+</html>

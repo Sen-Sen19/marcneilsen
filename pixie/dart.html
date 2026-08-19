@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>3D-ish Dart Shooter — Pixi + Matter.js</title>
+<style>
+  html, body { margin:0; padding:0; background:#0b1220; overflow:hidden; }
+  canvas { display:block; }
+  .ui { position:absolute; top:10px; left:10px; color:#ddd; font-family:sans-serif; }
+  .ui button { background:#1e293b; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="ui">
+  <p>Swipe to throw a dart 🎯 (forward into screen)</p>
+  <button id="reset">Reset</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.x/dist/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+<script>
+const { Engine, Runner, Bodies, Body, Events, Composite } = Matter;
+
+// --- Pixi ---
+const app = new PIXI.Application({ background:'#0b1220', resizeTo:window, antialias:true });
+document.body.appendChild(app.view);
+
+// --- Matter ---
+const engine = Engine.create();
+const world = engine.world;
+world.gravity.y = 1;
+const runner = Runner.create();
+Runner.run(runner, engine);
+
+// --- Layers ---
+const stage = app.stage;
+const dartsLayer = new PIXI.Container();
+const fxLayer = new PIXI.Container();
+stage.addChild(dartsLayer, fxLayer);
+
+// --- Ground ---
+const groundH = 60;
+const ground = Bodies.rectangle(app.view.width/2, app.view.height-groundH/2, app.view.width*2, groundH, { isStatic:true });
+Composite.add(world, ground);
+const groundG = new PIXI.Graphics();
+groundG.beginFill(0x22304a).drawRect(0, app.view.height-groundH, app.view.width, groundH).endFill();
+stage.addChild(groundG);
+
+// --- Target ---
+const targetX = app.view.width - 200;
+const targetY = app.view.height - groundH - 100;
+const targetR = 40;
+const target = Bodies.circle(targetX, targetY, targetR, { isStatic:true });
+Composite.add(world, target);
+const targetG = new PIXI.Graphics();
+targetG.beginFill(0x22c55e).drawCircle(0,0,targetR).endFill();
+targetG.x = targetX; targetG.y = targetY; stage.addChild(targetG);
+
+// --- Dart maker ---
+function makeDart(x,y){
+  const w=10,h=60;
+  const body = Bodies.rectangle(x,y,w,h,{ frictionAir:0.02, restitution:0.1, density:0.002 });
+  body.z = 0;      // forward depth
+  body.vz = 0;     // forward speed
+  Composite.add(world, body);
+
+  const g = new PIXI.Graphics();
+  g.beginFill(0xe5e7eb).drawRect(-w/2,-h/2,w,h).endFill();
+  g.beginFill(0xef4444).drawPolygon([0,-h/2-10,5,-h/2,-5,-h/2]);
+  const sprite = new PIXI.Sprite(app.renderer.generateTexture(g));
+  sprite.anchor.set(0.5);
+  dartsLayer.addChild(sprite);
+
+  return { body, sprite, stuck:false };
+}
+
+const darts = [];
+
+// --- Swipe ---
+let isAiming=false, start=null;
+const aimLine = new PIXI.Graphics();
+fxLayer.addChild(aimLine);
+
+app.view.addEventListener('pointerdown', e=>{ isAiming=true; start={x:e.clientX,y:e.clientY}; });
+app.view.addEventListener('pointermove', e=>{
+  if(!isAiming) return;
+  aimLine.clear();
+  aimLine.lineStyle(3,0xffd166,0.9);
+  aimLine.moveTo(start.x,start.y); aimLine.lineTo(e.clientX,e.clientY);
+});
+app.view.addEventListener('pointerup', e=>{
+  if(!isAiming) return;
+  shoot(start,{x:e.clientX,y:e.clientY});
+  isAiming=false; aimLine.clear();
+});
+
+function shoot(start,end){
+  const dx=end.x-start.x, dy=end.y-start.y;
+  const dist=Math.sqrt(dx*dx+dy*dy); if(dist<10) return;
+
+  const { body, sprite } = makeDart(start.x,start.y);
+  body.vz = Math.min(dist*0.15, 25); // forward speed
+  darts.push({ body,sprite,stuck:false });
+
+  const fx=dx*0.00025, fy=dy*0.00025;
+  Body.applyForce(body, body.position, {x:fx,y:fy});
+  Body.setAngularVelocity(body, dx*0.001);
+}
+
+// --- Collision: stick to target ---
+Events.on(engine,'collisionStart',event=>{
+  for(const pair of event.pairs){
+    const { bodyA, bodyB } = pair;
+    if((bodyA===target && isDart(bodyB)) || (bodyB===target && isDart(bodyA))){
+      const dartBody = bodyA===target?bodyB:bodyA;
+      const dart=darts.find(d=>d.body===dartBody);
+      if(dart && !dart.stuck){
+        dart.stuck=true;
+        Body.setStatic(dart.body,true);
+        dart.body.isSensor=true;
+      }
+    }
+  }
+});
+function isDart(body){ return darts.some(d=>d.body===body); }
+
+// --- Update loop ---
+app.ticker.add(()=>{
+  for(const dart of darts){
+    if(!dart.stuck){
+      dart.body.z += dart.body.vz*0.1;
+      const scale = Math.max(0.2,1-dart.body.z/1000);
+      dart.sprite.scale.set(scale);
+      dart.sprite.y = dart.body.position.y - dart.body.z*0.3;
+    }
+    dart.sprite.x=dart.body.position.x;
+    dart.sprite.rotation=dart.body.angle;
+  }
+
+  for(let i=darts.length-1;i>=0;i--){
+    const d=darts[i],p=d.body.position;
+    if(!d.stuck&&(p.y>app.view.height+200||p.x<-200||p.x>app.view.width+200)){
+      Composite.remove(world,d.body); dartsLayer.removeChild(d.sprite); darts.splice(i,1);
+    }
+  }
+});
+
+// --- Reset ---
+document.getElementById('reset').onclick=()=>{
+  darts.forEach(d=>Composite.remove(world,d.body));
+  dartsLayer.removeChildren(); darts.length=0;
+};
+
+// --- Resize ---
+window.addEventListener('resize',()=>{
+  Body.setPosition(ground,{x:app.view.width/2,y:app.view.height-groundH/2});
+  groundG.clear().beginFill(0x22304a).drawRect(0,app.view.height-groundH,app.view.width,groundH).endFill();
+  targetG.x=app.view.width-200; targetG.y=app.view.height-groundH-100;
+  Body.setPosition(target,{x:targetG.x,y:targetG.y});
+});
+
+app.renderer.view.style.touchAction='none';
+</script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sen-Sen19 Navbar</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Arial, sans-serif;
+    background-color: #0d1117;
+    color: white;
+  }
+
+  nav {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    background-color: #0d1117;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .hamburger {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+    background-color: #0d1117;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .hamburger span {
+    display: block;
+    width: 24px;
+    height: 2px;
+    background-color: #c0c0c0;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #c0c0c0;
+    font-weight: 600;
+    font-size: 16px;
+  }
+  .brand img {
+    width: 20px;
+    height: 20px;
+  }
+
+  .search-box {
+    display: inline-flex;
+    align-items: center;
+    background-color: #161b22;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 6px;
+    padding: 4px 10px;
+    color: #c0c0c0;
+    min-width: 250px;
+    font-size: 13px;
+    gap: 6px;
+  }
+  .search-box svg { stroke: #c0c0c0; }
+  .search-box span { color: #888888; }
+  .search-box .boxed-slash {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid #888888;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  .spacer { flex: 1; }
+
+  .nav-item {
+    width: 40px;
+    height: 32px;
+    border: 1px solid rgb(114,114,114);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .merged-box { display: flex; }
+  .merged-box .nav-item {
+    flex: 1;
+    border-radius: 0;
+    border-left: 1px solid rgb(114,114,114);
+    border-top: 1px solid rgb(114,114,114);
+    border-bottom: 1px solid rgb(114,114,114);
+  }
+  .merged-box .nav-item:first-child {
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-left: 1px solid rgb(114,114,114);
+  }
+  .merged-box .nav-item:last-child {
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+    border-right: 1px solid rgb(114,114,114);
+  }
+
+  .logo img { width: 32px; height: 32px; }
+
+</style>
+</head>
+<body>
+
+<nav>
+  <!-- Left: Hamburger + GitHub Brand -->
+<div style="display: flex; align-items: center; gap: 12px;">
+  <!-- Hamburger -->
+  <div class="hamburger" style="width: 34px; height: 34px; padding: 8px; gap: 6px;">
+    <span style="width: 20px; height: 2px; background-color: #c0c0c0;"></span>
+    <span style="width: 20px; height: 2px; background-color: #c0c0c0;"></span>
+    <span style="width: 20px; height: 2px; background-color: #c0c0c0;"></span>
+  </div>
+
+  <!-- Brand -->
+  <div class="brand" style="display: flex; align-items: center; gap: 4px; color: #c0c0c0;">
+  <img src="github.png" alt="GitHub Logo" style="filter: brightness(0) invert(1); width: 20px; height: 20px; margin-right: 20px;">
+  <span>Sen-Sen19</span>
+</div>
+
+</div>
+
+  <div class="spacer"></div>
+
+  <!-- Search -->
+<div class="search-box" style="font-size: 11px; min-width: 180px; padding: 3px 6px; gap: 3px; height: 24px; display: flex; align-items: center;">
+  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke="#888888">
+    <circle cx="11" cy="11" r="8"/>
+    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  </svg>
+  <span style="color:#777777;">Type</span>
+  <span class="boxed-slash" style="width: 16px; height: 16px; font-size: 10px; display: flex; align-items: center; justify-content: center; color:#777777;">/</span>
+  <span style="color:#777777;">to search</span>
+</div>
+
+<!-- Right nav boxes -->
+<div class="merged-box" style="height: 24px;">
+  <!-- GitHub Copilot -->
+  <div class="nav-item" style="height: 24px; display: flex; align-items: center; justify-content: center;">
+    <img src="https://github.githubassets.com/images/modules/site/copilot/copilot-logo.svg" 
+         alt="GitHub Copilot" 
+         style="width: 14px; height: 14px; filter: brightness(0) invert(1);">
+  </div>
+
+  <!-- Dropdown -->
+  <div class="nav-item" style="height: 24px; display: flex; align-items: center; justify-content: center;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#888888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 12 15 18 9"/>
+    </svg>
+  </div>
+</div>
+
+<div class="merged-box" style="height: 24px;">
+  <!-- + icon -->
+  <div class="nav-item" style="height: 24px; display: flex; align-items: center; justify-content: center; color: #888888; font-weight: bold; font-size: 14px;">
+    +
+  </div>
+
+  <!-- Dropdown -->
+  <div class="nav-item" style="height: 24px; display: flex; align-items: center; justify-content: center;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#888888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 12 15 18 9"/>
+    </svg>
+  </div>
+</div>
+
+<!-- Circle with dot (Your Issue) -->
+<div class="nav-item" style="width: 28px; height: 24px; display: flex; align-items: center; justify-content: center;">
+  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#888888" stroke-width="2">
+    <circle cx="8" cy="8" r="6"/>
+    <circle cx="8" cy="8" r="2" fill="#888888"/>
+  </svg>
+</div>
+SuperIT4
+<!-- Pull Request -->
+<div class="nav-item" style="width: 28px; height: 24px; display: flex; align-items: center; justify-content: center;">
+  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#888888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="4" cy="4" r="2" fill="#888888"/>
+    <circle cx="12" cy="12" r="2" fill="#888888"/>
+    <line x1="4" y1="6" x2="4" y2="12"/>
+    <line x1="4" y1="12" x2="12" y2="12"/>
+  </svg>
+</div>
+
+<!-- Notifications -->
+<div class="nav-item" style="width: 28px; height: 24px; display: flex; align-items: center; justify-content: center; position: relative;">
+  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#888888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+  </svg>
+  <svg xmlns="http://www.w3.org/2000/svg" width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="#888888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; bottom: 3px;">
+    <polyline points="6 9 12 15 18 9"/>
+  </svg>
+</div>
+
+
+
+<!-- Logo -->
+<div class="logo" style="width: 28px; height: 28px;">
+    <img src="logo.png" alt="Logo" style="width: 100%; height: 100%;">
+</div>
+
+
+</nav>
+
+</body>
+</html>

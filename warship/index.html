@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boat Wars - Smart Bot</title>
+<style>
+body { font-family: Arial; display: flex; flex-direction: column; align-items: center; background: #121212; color: #eee; }
+.controls { display: flex; gap: 10px; margin-bottom: 10px; }
+button { padding:8px 12px; border-radius:4px; background:#222; color:#eee; border:1px solid #555; cursor:pointer; }
+button:hover { background:#333; }
+.grid-container { display: flex; flex-direction: column; align-items: center; margin-bottom:20px; }
+.grid { display: grid; grid-gap:0; position: relative; }
+.cell { width: 25px; height: 25px; background: #1e1e1e; border-radius: 3px; }
+.cell.bot { background: #1a1a1a; cursor: pointer; }
+.cell.ship { background: #2e8b57; }
+.cell.hit { background: rgb(105, 0, 0); }
+.cell.miss { background: rgb(0,0,53); }
+.boat { position: absolute; background: #2e2e2e; border:2px solid #131313; cursor: grab; display:flex; justify-content:center; align-items:center; color:#fff; user-select:none; transition: background 0.2s; }
+.boat:active { cursor: grabbing; background: #aaa; }
+.cell.hit { 
+    background: rgb(200,0,0); 
+    z-index: 10;
+    position: relative;
+}
+
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <button id="rotateBtn">Rotate</button>
+  <button id="startBtn">Start Battle</button>
+</div>
+
+<div class="grid-container">
+  <div class="grid" id="botGrid"></div>
+  <div class="grid" id="playerGrid"></div>
+</div>
+
+<script>
+const GRID_ROWS = 10;
+const GRID_COLS = 20;
+const CELL_SIZE = 25;
+
+const BOATS = [
+  {name:'B1', size:[2,2]},
+  {name:'B2', size:[1,3]},
+  {name:'B3', size:[2,4]},
+  {name:'B4', size:[2,1]},
+  {name:'B5', size:[3,2]},
+  {name:'B6', size:[1,4]}
+];
+
+let gameStarted = false;
+let selectedBoat = null;
+
+let playerBoard = Array.from({length: GRID_ROWS}, () => Array(GRID_COLS).fill(0));
+let botBoard = Array.from({length: GRID_ROWS}, () => Array(GRID_COLS).fill(0));
+let playerShips = [];
+let botShips = [];
+
+const botGridEl = document.getElementById('botGrid');
+const playerGridEl = document.getElementById('playerGrid');
+
+function createGrid(gridEl, rows, cols, bot=false){
+  gridEl.innerHTML = '';
+  gridEl.style.gridTemplateColumns = `repeat(${cols}, ${CELL_SIZE}px)`;
+  gridEl.style.gridTemplateRows = `repeat(${rows}, ${CELL_SIZE}px)`;
+  gridEl.style.width = cols*CELL_SIZE+'px';
+  gridEl.style.height = rows*CELL_SIZE+'px';
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const cell = document.createElement('div');
+      cell.classList.add('cell');
+      if(bot) cell.classList.add('bot');
+      cell.dataset.row=r;
+      cell.dataset.col=c;
+      gridEl.appendChild(cell);
+    }
+  }
+}
+
+createGrid(botGridEl, GRID_ROWS, GRID_COLS, true);
+createGrid(playerGridEl, GRID_ROWS, GRID_COLS, false);
+
+// Boats creation
+BOATS.forEach((b,i)=>{
+  const div = document.createElement('div');
+  div.classList.add('boat');
+  div.dataset.name = b.name;
+  div.dataset.index = i;
+  div.dataset.rotate = 0;
+  div.style.width = b.size[1]*CELL_SIZE + 'px';
+  div.style.height = b.size[0]*CELL_SIZE + 'px';
+  div.style.top = '0px';
+  div.style.left = i*(CELL_SIZE*4)+'px';
+  div.textContent = b.name;
+  makeDraggable(div);
+  playerGridEl.appendChild(div);
+});
+
+document.getElementById('rotateBtn').addEventListener('click', ()=>{ if(selectedBoat) rotateBoat(selectedBoat); });
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  if(playerShips.length < BOATS.length){ alert('Place all your boats first!'); return; }
+  gameStarted=true;
+  document.querySelectorAll('.boat').forEach(b => b.style.pointerEvents='none');
+  placeBotBoats();
+  alert('Battle Started! Click bot grid to fire!');
+});
+
+function makeDraggable(el){
+  let offsetX, offsetY;
+  el.onmousedown = e=>{
+    selectedBoat = el;
+    const rect = el.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    document.onmousemove = e=>{
+      const gridRect = playerGridEl.getBoundingClientRect();
+      el.style.left = e.clientX - gridRect.left - offsetX + 'px';
+      el.style.top = e.clientY - gridRect.top - offsetY + 'px';
+    };
+    document.onmouseup = e=>{
+      document.onmousemove = null;
+      snapBoatToGrid(el);
+    };
+  };
+}
+
+function rotateBoat(el){
+  const index = parseInt(el.dataset.index);
+  const b = BOATS[index];
+  let rot = parseInt(el.dataset.rotate);
+  rot = (rot+1)%2;
+  el.dataset.rotate = rot;
+  const w = rot? b.size[0]*CELL_SIZE : b.size[1]*CELL_SIZE;
+  const h = rot? b.size[1]*CELL_SIZE : b.size[0]*CELL_SIZE;
+  el.style.width=w+'px';
+  el.style.height=h+'px';
+  snapBoatToGrid(el);
+}
+
+function snapBoatToGrid(el){
+  const index = parseInt(el.dataset.index);
+  const b = BOATS[index];
+  const rot = parseInt(el.dataset.rotate);
+  const wCells = rot? b.size[0] : b.size[1];
+  const hCells = rot? b.size[1] : b.size[0];
+
+  const gridRect = playerGridEl.getBoundingClientRect();
+  let col = Math.round((el.getBoundingClientRect().left - gridRect.left)/CELL_SIZE);
+  let row = Math.round((el.getBoundingClientRect().top - gridRect.top)/CELL_SIZE);
+
+  col = Math.max(0, Math.min(GRID_COLS - wCells, col));
+  row = Math.max(0, Math.min(GRID_ROWS - hCells, row));
+
+  if(el.dataset.placed){
+    const prev = JSON.parse(el.dataset.placed);
+    for(let i=prev.r;i<prev.r+prev.h;i++)
+      for(let j=prev.c;j<prev.c+prev.w;j++)
+        playerBoard[i][j]=0;
+    playerShips = playerShips.filter(s=>s.name!==b.name);
+  }
+
+  for(let i=row;i<row+hCells;i++)
+    for(let j=col;j<col+wCells;j++)
+      if(playerBoard[i][j]!==0) return;
+
+  for(let i=row;i<row+hCells;i++)
+    for(let j=col;j<col+wCells;j++)
+      playerBoard[i][j]=1;
+
+  el.style.left = col*CELL_SIZE + 'px';
+  el.style.top = row*CELL_SIZE + 'px';
+  el.dataset.placed = JSON.stringify({r:row,c:col,h:hCells,w:wCells});
+  playerShips.push({name:b.name,r:row,c:col,h:hCells,w:wCells,hits:0,size:hCells*wCells});
+}
+
+// Bot boats
+function placeBotBoats(){
+  BOATS.forEach(boat=>{
+    let placed=false;
+    while(!placed){
+      const rotate = Math.random()<0.5;
+      const [h,w] = rotate? [boat.size[1],boat.size[0]] : [boat.size[0],boat.size[1]];
+      const r = Math.floor(Math.random()*(GRID_ROWS - h + 1));
+      const c = Math.floor(Math.random()*(GRID_COLS - w + 1));
+      if(canPlace(botBoard,r,c,h,w)){
+        for(let i=r;i<r+h;i++)
+          for(let j=c;j<c+w;j++)
+            botBoard[i][j]=1;
+        botShips.push({r,c,h,w,hits:0,size:h*w});
+        placed=true;
+      }
+    }
+  });
+}
+
+function canPlace(board,r,c,h,w){
+  if(r+h>GRID_ROWS || c+w>GRID_COLS) return false;
+  for(let i=r;i<r+h;i++)
+    for(let j=c;j<c+w;j++)
+      if(board[i][j]!==0) return false;
+  return true;
+}
+
+// Player shooting
+botGridEl.addEventListener('click', e=>{
+  if(!gameStarted) return;
+  const cell = e.target;
+  if(!cell.classList.contains('cell')) return;
+  const r=parseInt(cell.dataset.row);
+  const c=parseInt(cell.dataset.col);
+  if(cell.classList.contains('hit')||cell.classList.contains('miss')) return;
+
+  if(botBoard[r][c]===1){ 
+    cell.classList.add('hit'); 
+    checkBotShipHit(r,c); 
+  } else {
+    cell.classList.add('miss');
+  }
+  setTimeout(botAttack, 300); // bot moves after player
+});
+
+function checkBotShipHit(r,c){
+  for(const ship of botShips){
+    if(r>=ship.r && r<ship.r+ship.h && c>=ship.c && c<ship.c+ship.w){
+      ship.hits++;
+      if(ship.hits>=ship.size) alert('You sank a bot ship!');
+      break;
+    }
+  }
+}
+
+// Smart bot AI
+let botHitsQueue = [];
+
+function botAttack(){
+  if(!gameStarted) return;
+
+  let r, c;
+
+  if(botHitsQueue.length > 0){
+    [r, c] = botHitsQueue.shift();
+  } else {
+    do {
+      r = Math.floor(Math.random() * GRID_ROWS);
+      c = Math.floor(Math.random() * GRID_COLS);
+    } while(playerGridEl.children[r*GRID_COLS + c].classList.contains('hit') || 
+            playerGridEl.children[r*GRID_COLS + c].classList.contains('miss'));
+  }
+
+  const cellIndex = r * GRID_COLS + c;
+  const cell = playerGridEl.children[cellIndex];
+if(playerBoard[r][c] === 1){
+    // mark the cell under the boat
+    cell.classList.add('hit'); 
+    cell.style.background = 'rgb(200,0,0)'; // brighter red for bot hit
+
+
+    // Handle hits count & AI queue
+    for(const ship of playerShips){
+        if(r>=ship.r && r<ship.r+ship.h && c>=ship.c && c<ship.c+ship.w){
+            ship.hits++;
+            if(ship.hits >= ship.size){
+                alert('Bot sank your ship: ' + ship.name);
+                botHitsQueue = botHitsQueue.filter(([qr,qc]) => 
+                    !(qr >= ship.r && qr < ship.r+ship.h && qc >= ship.c && qc < ship.c+ship.w)
+                );
+            } else {
+                const adj = [[r-1,c],[r+1,c],[r,c-1],[r,c+1]];
+                adj.forEach(([nr,nc])=>{
+                    if(nr>=0 && nr<GRID_ROWS && nc>=0 && nc<GRID_COLS){
+                        const adjCell = playerGridEl.children[nr*GRID_COLS + nc];
+                        if(!adjCell.classList.contains('hit') && !adjCell.classList.contains('miss')){
+                            botHitsQueue.push([nr,nc]);
+                        }
+                    }
+                });
+            }
+            break;
+        }
+    }
+}
+else {
+    cell.classList.add('miss');
+    cell.style.background = 'rgb(0,0,53)';
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Realistic Calamba 3D Map</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #111; }
+  #map { width: 100%; height: 100%; }
+</style>
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+</head>
+<body>
+<div id="map"></div>
+<script>
+const map = new maplibregl.Map({
+  container: 'map',
+  // Use streets-v2 (light style) to get real building heights
+  style: 'https://api.maptiler.com/maps/streets-v2-dark/style.json?key=8vrcSKgRwZN60UNY7hRY',
+  center: [121.1651, 14.2061], // Calamba
+  zoom: 16,
+  pitch: 60,
+  bearing: 0,
+  dragRotate: true,
+  touchPitch: true
+});
+
+// Add navigation controls
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+map.on('load', () => {
+  const layers = map.getStyle().layers;
+
+  // 3D Buildings
+  const buildingLayer = layers.find(l => l.type === 'fill-extrusion');
+  if(buildingLayer){
+    map.setPaintProperty(buildingLayer.id, 'fill-extrusion-color', [
+      'interpolate', ['linear'], ['get', 'height'],
+      0, '#555',     // low buildings
+      20, '#666',
+      50, '#777',
+      100, '#888',   // tall buildings
+      200, '#999'
+    ]);
+    map.setPaintProperty(buildingLayer.id, 'fill-extrusion-height', ['get', 'render_height']);
+    map.setPaintProperty(buildingLayer.id, 'fill-extrusion-base', ['get', 'render_min_height']);
+    map.setPaintProperty(buildingLayer.id, 'fill-extrusion-opacity', 0.95);
+  }
+
+  // Roads
+  layers.filter(l => l.id.includes('road')).forEach(streetLayer => {
+    map.setPaintProperty(streetLayer.id, 'line-color', '#333');
+    map.setPaintProperty(streetLayer.id, 'line-width', 1.2);
+    map.setPaintProperty(streetLayer.id, 'line-opacity', 0.9);
+  });
+
+  // Water
+  layers.filter(l => l.id.includes('water')).forEach(waterLayer => {
+    map.setPaintProperty(waterLayer.id, 'fill-color', '#1a3c66');
+    map.setPaintProperty(waterLayer.id, 'fill-opacity', 0.7);
+  });
+
+  // Parks / Green areas
+  layers.filter(l => l.id.includes('park')).forEach(parkLayer => {
+    map.setPaintProperty(parkLayer.id, 'fill-color', '#2a4d2a');
+    map.setPaintProperty(parkLayer.id, 'fill-opacity', 0.7);
+  });
+});
+
+// Keyboard tilt control
+window.addEventListener('keydown', e => {
+  const pitch = map.getPitch();
+  if(e.key === 'ArrowUp') map.setPitch(Math.min(pitch + 5, 85));
+  if(e.key === 'ArrowDown') map.setPitch(Math.max(pitch - 5, 0));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Matter-Pixi Bowling Game</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #333;
+        }
+        #game-container {
+            border: 3px solid #8B4513; /* Brown border for the lane */
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            cursor: grab;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.x/dist/pixi.min.js"></script>
+    
+    <script>
+        // --- Matter.js Aliases ---
+        // This is line 27 in your original code, which failed because Matter wasn't defined yet.
+        const Engine = Matter.Engine; 
+        const World = Matter.World;
+        const Bodies = Matter.Bodies;
+        const Body = Matter.Body;
+        const Events = Matter.Events;
+
+        // --- Game Configuration ---
+        const WIDTH = 800;
+        const HEIGHT = 600;
+        const PIN_COUNT = 10;
+        const PIN_WIDTH = 15;
+        const PIN_HEIGHT = 45;
+        const BALL_RADIUS = 20;
+        const LAUNCH_FORCE_SCALE = 0.0005;
+
+        let ball = null;
+        const gameObjects = [];
+        const pinBodies = [];
+
+        // --- Initialization ---
+
+        // 1. Initialize Matter.js Engine
+        const engine = Engine.create();
+        const world = engine.world;
+        world.gravity.y = 0.05; // Slight gravity for a flat surface effect
+
+        // 2. Initialize Pixi.js Application
+        const app = new PIXI.Application({
+            width: WIDTH,
+            height: HEIGHT,
+            backgroundColor: 0x222244, // Dark color for the lane background
+            antialias: true,
+        });
+        document.getElementById('game-container').appendChild(app.view);
+
+        // --- Helper Functions ---
+
+        /**
+        * Creates a synchronized Matter Body and Pixi Sprite.
+        * @param {number} x - X position.
+        * @param {number} y - Y position.
+        * @param {string} type - 'circle' or 'rectangle'.
+        * @param {number} w - Width/Radius.
+        * @param {number} h - Height (for rectangle).
+        * @param {string} texturePath - Path to the image texture.
+        * @param {boolean} isStatic - If the body should be fixed.
+        */
+      // Function to draw a colored shape instead of using an external image
+function createGameObject(x, y, type, w, h, texturePath, isStatic = false) {
+    let body;
+    const options = {
+        isStatic: isStatic,
+        restitution: 0.8,
+        friction: 0.005,
+        mass: type === 'rectangle' ? 1 : 2 
+    };
+
+    if (type === 'circle') {
+        body = Bodies.circle(x, y, w, options);
+    } else { 
+        body = Bodies.rectangle(x, y, w, h, options);
+    }
+    World.add(world, body);
+
+    // --- START OF PIXI Graphics CHANGES ---
+    const graphic = new PIXI.Graphics();
+    graphic.beginFill(type === 'circle' ? 0xFF0000 : 0xFFFFFF); // Red ball, White pin
+    graphic.lineStyle(1, 0x000000); // Black border
+    
+    if (type === 'circle') {
+        graphic.drawCircle(0, 0, w);
+        graphic.pivot.set(0.5, 0.5); // Center pivot for rotation
+    } else {
+        graphic.drawRect(-w/2, -h/2, w, h); // Draw centered rectangle
+    }
+    graphic.endFill();
+    // --- END OF PIXI Graphics CHANGES ---
+
+    // The sprite object is now the graphic object
+    const gameObject = { body, sprite: graphic }; 
+    gameObjects.push(gameObject);
+    app.stage.addChild(graphic); // Add graphic to stage
+
+    return gameObject;
+}
+
+// NOTE: You must also remove the texturePath argument from the calls in setupLane():
+// Original: ball = createGameObject(..., 'images/ball.png');
+// Change to: ball = createGameObject(WIDTH / 2, HEIGHT - 50, 'circle', BALL_RADIUS, 0, ''); 
+// Or simply remove the texturePath parameter from the function definition if using this method.
+
+        function setupLane() {
+            // 1. Boundaries (invisible static bodies)
+            const floor = Bodies.rectangle(WIDTH / 2, HEIGHT - 5, WIDTH, 10, { isStatic: true, friction: 0.8, label: 'floor' });
+            const wallLeft = Bodies.rectangle(5, HEIGHT / 2, 10, HEIGHT, { isStatic: true, label: 'wall' });
+            const wallRight = Bodies.rectangle(WIDTH - 5, HEIGHT / 2, 10, HEIGHT, { isStatic: true, label: 'wall' });
+
+            World.add(world, [floor, wallLeft, wallRight]);
+
+            // 2. The Ball
+            ball = createGameObject(WIDTH / 2, HEIGHT - 50, 'circle', BALL_RADIUS, 0, 'images/ball.png');
+            Body.setMass(ball.body, 10); // Make the ball heavy
+
+            // 3. The Pins (Triangle formation)
+            const pinStartX = WIDTH - 150;
+            const pinStartY = HEIGHT / 2;
+            
+            // Rows: 4, 3, 2, 1 (from back to front)
+            let pinIndex = 0;
+            for (let row = 4; row >= 1; row--) {
+                const rowCount = row;
+                const rowSpacing = PIN_WIDTH * 1.5;
+                const totalRowWidth = (rowCount - 1) * rowSpacing;
+                
+                let xPos = pinStartX - (4 - row) * rowSpacing * 0.866; // Adjust X for triangle depth
+                let yCenter = pinStartY - totalRowWidth / 2;
+
+                for (let i = 0; i < rowCount; i++) {
+                    let yPos = yCenter + i * rowSpacing;
+                    
+                    const pin = createGameObject(xPos, yPos, 'rectangle', PIN_WIDTH, PIN_HEIGHT, 'images/pin.png');
+                    pinBodies.push(pin.body);
+                    pinIndex++;
+                }
+            }
+        }
+
+        // --- Input Handling ---
+
+        let isDragging = false;
+        let startPos = { x: 0, y: 0 };
+
+        app.view.addEventListener('mousedown', (e) => {
+            // Only allow launch if the ball is near the start position and mostly stopped
+            if (ball && ball.body.position.y > HEIGHT - 100 && Body.getSpeed(ball.body) < 1) {
+                isDragging = true;
+                startPos.x = e.offsetX;
+                startPos.y = e.offsetY;
+                document.getElementById('game-container').style.cursor = 'grabbing';
+            }
+        });
+
+        app.view.addEventListener('mouseup', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            document.getElementById('game-container').style.cursor = 'grab';
+
+            const endPos = { x: e.offsetX, y: e.offsetY };
+            
+            // Calculate vector from mouse movement (Start - End = Direction)
+            const deltaX = startPos.x - endPos.x;
+            const deltaY = startPos.y - endPos.y; 
+
+            // Calculate Force Vector (Apply mainly in the Y direction - up the lane)
+            const force = { 
+                x: deltaX * LAUNCH_FORCE_SCALE, 
+                y: deltaY * LAUNCH_FORCE_SCALE 
+            };
+
+            // Apply the force to the ball's center
+            Body.applyForce(ball.body, ball.body.position, force);
+        });
+
+
+        // --- Game Loop (The Synchronizer) ---
+
+        app.ticker.add(() => {
+            // 1. Advance the Matter.js Physics Engine
+            Engine.update(engine, app.ticker.delta);
+
+            // 2. Synchronize Physics to Graphics (Copy body position/rotation to sprites)
+            for (const obj of gameObjects) {
+                obj.sprite.x = obj.body.position.x;
+                obj.sprite.y = obj.body.position.y;
+                obj.sprite.rotation = obj.body.angle;
+            }
+        });
+
+        // --- Start the Game ---
+        setupLane();
+    </script>
+</body>
+</html>
